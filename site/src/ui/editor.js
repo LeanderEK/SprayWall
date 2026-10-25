@@ -2,7 +2,7 @@ import { app, wallPicture } from '../app.js';
 import { MAX_GRADE, gradeLabel, gradeToStop, marksOf, stopToGrade } from '../domain/climbs.js';
 import { formatMarks } from '../domain/holds.js';
 import { ROLES } from '../domain/roles.js';
-import { confirmDialog, h, icon, iconButton, openSheet, stars, toast } from './dom.js';
+import { confirmDialog, h, icon, iconButton, openSheet, toast } from './dom.js';
 import { appBar } from './list.js';
 import { PAINT, WallView } from './wallview.js';
 
@@ -18,6 +18,11 @@ export async function mountEditor(root, { id }) {
     root.append(appBar({ title: isNew ? 'New climb' : 'Edit climb', back: () => nav.back('/') }), h('div', { class: 'empty' }, h('h2', {}, isNew ? 'Set up a wall first' : 'This climb is not here any more'), h('button', { type: 'button', class: 'btn', onclick: () => nav.replace(isNew ? '/walls' : '/') }, isNew ? 'Go to Walls' : 'Back to the list')));
     return {};
   }
+  if (existing?.publishedAt) {
+    // A climb on a shared board is final. (The viewer does not offer Edit for it; this is for a stale or typed address.)
+    root.append(appBar({ title: 'Edit climb', back: () => nav.back('/') }), h('div', { class: 'empty' }, h('h2', {}, 'This climb is uploaded'), h('p', {}, 'Once a climb is on a shared board nobody can change or delete it.'), h('button', { type: 'button', class: 'btn', onclick: () => nav.replace(`/climb/${existing.id}`) }, 'Back to the climb')));
+    return {};
+  }
   const picture = await wallPicture(wall);
 
   const state = {
@@ -26,7 +31,6 @@ export async function mountEditor(root, { id }) {
     undo: [],
     name: existing ? existing.name : '',
     grade: existing ? existing.grade : null,
-    stars: existing ? existing.stars : 0,
     comment: existing ? existing.comment : '',
     dirty: false,
     outlines: true,
@@ -114,10 +118,8 @@ export async function mountEditor(root, { id }) {
     const nameInput = h('input', { class: 'field', type: 'text', maxlength: 80, value: state.name, 'aria-label': 'Name', autocomplete: 'off', oninput: () => { state.name = nameInput.value; state.dirty = true; app.leaveGuard = guard; update(); } });
     const gradeText = h('div', { class: 'grade-value' });
     const slider = h('input', { type: 'range', min: 0, max: MAX_GRADE + 1, step: 1, value: gradeToStop(state.grade), 'aria-label': 'Grade', oninput: () => { state.grade = stopToGrade(Number(slider.value)); state.dirty = true; app.leaveGuard = guard; update(); } });
-    const starsBox = h('div', {});
     const commentInput = h('textarea', { class: 'field', rows: 3, maxlength: 2000, 'aria-label': 'Comment', placeholder: 'Comment (optional)', oninput: () => { state.comment = commentInput.value; state.dirty = true; app.leaveGuard = guard; } }, state.comment);
     const saveBtn = h('button', { type: 'button', class: 'btn primary wide', onclick: save }, 'Save');
-    const paintStars = () => starsBox.replaceChildren(stars(state.stars, { size: 30, onSelect: (value) => { state.stars = value; state.dirty = true; app.leaveGuard = guard; paintStars(); } }));
     function update() {
       gradeText.textContent = state.grade === null ? 'None' : gradeLabel(state.grade);
       saveBtn.disabled = state.name.trim() === '' || state.saving;
@@ -127,7 +129,7 @@ export async function mountEditor(root, { id }) {
       state.saving = true;
       update();
       try {
-        const saved = await repo.saveClimb({ id: existing?.id, wallKey: wall.key, name: state.name, grade: state.grade, stars: state.stars, comment: state.comment, holds: formatMarks(state.marks) });
+        const saved = await repo.saveClimb({ id: existing?.id, wallKey: wall.key, name: state.name, grade: state.grade, comment: state.comment, holds: formatMarks(state.marks) });
         state.dirty = false;
         app.leaveGuard = null;
         sheet.close();
@@ -139,9 +141,8 @@ export async function mountEditor(root, { id }) {
         toast('Could not save the climb. ' + (error?.message || ''));
       }
     }
-    paintStars();
     update();
-    const sheet = openSheet('Save climb', h('div', { class: 'sheet-body' }, h('label', { class: 'field-label' }, 'Name', nameInput), h('div', { class: 'row-between' }, h('h3', {}, 'Grade'), gradeText), slider, h('h3', {}, 'Stars'), starsBox, commentInput, saveBtn));
+    const sheet = openSheet('Save climb', h('div', { class: 'sheet-body' }, h('label', { class: 'field-label' }, 'Name', nameInput), h('div', { class: 'row-between' }, h('h3', {}, 'Grade'), gradeText), slider, commentInput, h('p', { class: 'note' }, 'Saved on this phone as a draft. You can upload it from the climb when it is ready; after that it cannot be changed.'), saveBtn));
     nameInput.focus({ preventScroll: true });
   }
 

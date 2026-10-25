@@ -1,15 +1,16 @@
+import { isMine, isUploaded } from '../domain/climbs.js';
 import { SyncError, cleanRemote, makeBoardCode, parseBoardCode, stampValue, toRecord } from '../domain/sync.js';
 
-// Keeping a wall's climbs in step with a shared board. Everything works on the phone first; the board is only visited
-// when there is a connection. One visit ("a sync") does two things, in this order:
-//   1. fetch what the board gained since the last visit, and take it in (newest change wins, deletions are kept);
-//   2. send the climbs the board does not have the current version of yet.
-// Fetching first means a phone that was offline for a while does not overwrite newer edits with its old ones.
+// A wall's shared board. Everything works on the phone first; the board is only visited when there is a connection.
+//   - Fetching: climbs other people (or your other phones) have uploaded since the last visit are added here. Uploaded
+//     climbs never change, so there is nothing to merge: a climb is either here or it is not.
+//   - Uploading: you choose, one climb at a time. A draft of yours goes to the board and from then on it can no longer be
+//     edited or deleted, by anyone, you included.
 
 const DELAYS = {
   first: 500, // after the app opens
-  afterChange: 2500, // after you change something, so a burst of changes is sent together
-  whileOpen: 2 * 60 * 1000, // and look for friends' changes this often while the app is open
+  afterChange: 2500, // after anything changes here
+  whileOpen: 2 * 60 * 1000, // and look for new climbs this often while the app is open
 };
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -31,7 +32,7 @@ export class SyncService {
     return this.remote !== null;
   }
 
-  /** What is happening with a wall's sync, for showing. */
+  /** What is happening with a wall's board, for showing. */
   stateOf(wallKey) {
     return this.states.get(wallKey) || { status: 'idle', message: '', at: null };
   }
@@ -47,11 +48,15 @@ export class SyncService {
     for (const listener of this.listeners) listener(wallKey);
   }
 
-  /** One thing at a time, so two syncs never run over each other. */
+  /** One thing at a time, so two visits to the board never run over each other. */
   #exclusive(task) {
     const run = this.queue.then(task, task);
     this.queue = run.catch(() => {});
     return run;
+  }
+
+  #need() {
+    if (!this.remote) throw new SyncError('setup', 'Sync is not switched on in this copy of the app.');
   }
 
   // ---- starting and stopping ----
@@ -75,13 +80,6 @@ export class SyncService {
     return code;
   }
 
-  /** Remembers the board and does the first sync. The board is joined even if that first sync cannot happen yet. */
-  async #begin(wallKey, code) {
-    await this.repo.setSyncSetup(wallKey, { code, lastPull: null, lastSyncedAt: null });
-    this.#setState(wallKey, { status: 'idle' });
-    await this.syncWall(wallKey).catch(() => {}); // a problem shows in the wall's state
-  }
-
   /** Joins the board with this code (as typed or pasted). The board must be for the same wall. Returns the code. */
   async joinBoard(wallKey, text) {
     this.#need();
@@ -95,25 +93,28 @@ export class SyncService {
     return code;
   }
 
-  /** Stops syncing this wall. Its climbs stay on the phone; the board keeps what is on it. */
+  /** Remembers the board and fetches its climbs. The board is joined even if that first fetch cannot happen yet. */
+  async #begin(wallKey, code) {
+    await this.repo.setSyncSetup(wallKey, { code, lastPull: null, lastSyncedAt: null });
+    this.#setState(wallKey, { status: 'idle' });
+    await this.syncWall(wallKey).catch(() => {}); // a problem shows in the wall's state
+  }
+
+  /** Stops using the board on this phone. Its climbs stay here (uploaded ones stay uploaded). */
   async stop(wallKey) {
     await this.repo.setSyncSetup(wallKey, undefined);
     this.states.delete(wallKey);
     for (const listener of this.listeners) listener(wallKey);
   }
 
-  #need() {
-    if (!this.remote) throw new SyncError('setup', 'Sync is not switched on in this copy of the app.');
-  }
+  // ---- fetching ----
 
-  // ---- the sync itself ----
-
-  /** Syncs one wall now. Resolves with { added, updated, deleted, sent }, or null if there was nothing to do. */
+  /** Fetches the new climbs of one wall's board now. Resolves with { added, replaced }, or null if the wall has no board. */
   syncWall(wallKey) {
-    return this.#exclusive(() => this.#syncWall(wallKey));
+    return this.#exclusive(() => this.#fetch(wallKey));
   }
 
-  /** Syncs every wall that has a board. Never throws: problems show up in each wall's state. */
+  /** Does that for every wall that has a board. Never throws: problems show up in each wall's state. */
   async syncAll() {
     if (!this.remote) return;
     for (const wall of await this.repo.listWalls()) {
@@ -122,37 +123,28 @@ export class SyncService {
     }
   }
 
-  async #syncWall(wallKey) {
+  async #fetch(wallKey) {
     const setup = await this.repo.getSyncSetup(wallKey);
     if (!setup || !this.remote) return null;
     this.#setState(wallKey, { status: 'syncing' });
-    const result = { added: 0, updated: 0, deleted: 0, sent: 0 };
+    const result = { added: 0, replaced: 0 };
     try {
-      // 1. fetch
       let since = setup.lastPull;
       let latest = setup.lastPull;
       let inclusive = false;
-      for (let page = 0; page < 100; page++) {
+      for (let page = 0; page < 200; page++) {
         const { records, full } = await this.remote.fetchClimbs(setup.code, since, { inclusive });
-        const clean = records.map((record) => cleanRemote(record, this.now())).filter(Boolean);
-        const counts = await this.repo.applySynced(wallKey, setup.code, clean);
+        const clean = records.map((record) => cleanRemote(record.id, record, this.now())).filter(Boolean);
+        const counts = await this.repo.applyPublished(wallKey, clean);
         result.added += counts.added;
-        result.updated += counts.updated;
-        result.deleted += counts.deleted;
+        result.replaced += counts.replaced;
         // Stamps come from the database's own clock. One from the far future (someone with the code could write one) is
         // ignored, or it would make this phone skip everything stamped after it.
         const stamps = records.map((record) => record.serverTime).filter((stamp) => stampValue(stamp) / 1000 <= this.now() + DAY);
         if (stamps.length) latest = stamps.reduce((a, b) => (stampValue(b) > stampValue(a) ? b : a));
         if (!full || !stamps.length || latest === since) break;
         since = latest;
-        inclusive = true; // a full page may end in the middle of climbs sent together, so look at that stamp again
-      }
-      // 2. send
-      const unsent = await this.repo.climbsToSend(wallKey, setup.code);
-      if (unsent.length) {
-        await this.remote.sendClimbs(setup.code, unsent.map(toRecord));
-        await this.repo.markSent(setup.code, unsent);
-        result.sent = unsent.length;
+        inclusive = true; // a full page may end in the middle of climbs stamped together, so look at that stamp again
       }
       const at = this.now();
       await this.repo.setSyncSetup(wallKey, { ...setup, lastPull: latest, lastSyncedAt: at });
@@ -160,17 +152,53 @@ export class SyncService {
       for (const listener of this.listeners) listener(wallKey);
       return result;
     } catch (error) {
-      const known = error instanceof SyncError ? error : new SyncError('server', 'Something went wrong while syncing.');
-      if (!(error instanceof SyncError)) console.error(error);
-      if (known.kind === 'offline') this.#setState(wallKey, { status: 'offline', message: 'Offline. Changes are sent when you are back online.' });
-      else this.#setState(wallKey, { status: 'error', message: known.message });
-      throw known;
+      throw this.#failed(wallKey, error);
     }
   }
 
-  // ---- when to sync ----
+  #failed(wallKey, error) {
+    const known = error instanceof SyncError ? error : new SyncError('server', 'Something went wrong while syncing.');
+    if (!(error instanceof SyncError)) console.error(error);
+    if (known.kind === 'offline') this.#setState(wallKey, { status: 'offline', message: 'Offline. New climbs arrive when you are back online.' });
+    else this.#setState(wallKey, { status: 'error', message: known.message });
+    return known;
+  }
 
-  /** Syncs now and then from here on: after changes, when the app comes back, when the connection returns, and every
+  // ---- uploading ----
+
+  /**
+   * Uploads one of your drafts to its wall's board. Afterwards it cannot be edited or deleted. Throws a SyncError saying
+   * why not if it is not yours, not a draft, or there is no board or connection.
+   */
+  upload(climbId) {
+    return this.#exclusive(() => this.#upload(climbId));
+  }
+
+  async #upload(climbId) {
+    this.#need();
+    const climb = await this.repo.getClimb(climbId);
+    if (!climb) throw new SyncError('mine', 'That climb is not on this phone any more.');
+    if (isUploaded(climb)) throw new SyncError('mine', 'That climb is already uploaded.');
+    const me = await this.repo.authorName();
+    if (!me) throw new SyncError('username', 'Choose a username first.');
+    if (!isMine(climb, me)) throw new SyncError('mine', 'Only climbs you made can be uploaded.');
+    const setup = await this.repo.getSyncSetup(climb.wallKey);
+    if (!setup) throw new SyncError('board', 'Start or join a board for this wall first (share button, Sync with friends).');
+    try {
+      await this.remote.createClimb(setup.code, climb.id, toRecord(climb));
+    } catch (error) {
+      // Already there: an earlier try got through even though its answer was lost. That is the outcome wanted.
+      const alreadyThere = error.kind === 'exists' || (error.kind === 'denied' && (await this.remote.hasClimb(setup.code, climb.id).catch(() => false)));
+      if (!alreadyThere) throw this.#failed(climb.wallKey, error);
+    }
+    await this.repo.markPublished(climb.id);
+    this.#setState(climb.wallKey, { status: 'ok', at: this.now() });
+    return climb.id;
+  }
+
+  // ---- when to look for new climbs ----
+
+  /** Fetches now and then from here on: after changes, when the app comes back, when the connection returns, and every
    * couple of minutes while it is open. */
   start(target = globalThis) {
     if (!this.remote || this.stops.length) return;

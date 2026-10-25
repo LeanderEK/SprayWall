@@ -33,7 +33,6 @@ def main() -> None:
             "id": str(uuid.uuid5(NAMESPACE, f"{WALL_KEY}/{row[0]}")),
             "name": row[1],
             "grade": row[2],
-            "stars": row[3],
             "comment": row[4] or "",
             "author": "",
             "holds": row[5],
@@ -47,7 +46,7 @@ def main() -> None:
     out.write_text(json.dumps(share, indent=1), encoding="utf-8")
     print(f"{len(climbs)} climbs from wall '{wall[1] if wall else '?'}' written to {out}")
     for climb in climbs:
-        print(f"  {climb['name']!r}: V{climb['grade']}, {climb['stars']} stars, {len(climb['holds'].split(','))} holds, id {climb['id']}")
+        print(f"  {climb['name']!r}: V{climb['grade']}, {len(climb['holds'].split(','))} holds, id {climb['id']}")
 
 
 if __name__ == "__main__":

@@ -102,6 +102,15 @@ class Browser:
             time.sleep(0.25)
         raise RuntimeError(f"timed out waiting for {what or expression} (last: {last})")
 
+    def choose_username(self, name: str = "Tester"):
+        """A fresh app asks for a username before it shows anything; this answers the question."""
+        self.wait_for("!!document.querySelector('.dialog input')", what="the username question")
+        self.eval(
+            "(() => { const input = document.querySelector('.dialog input'); input.value = %r; "
+            "[...document.querySelectorAll('.dialog button')].find((b) => b.textContent === 'Continue').click(); return true; })()" % name
+        )
+        self.wait_for("!document.querySelector('.dialog') && !!document.querySelector('.bar')", what="the app after choosing a username")
+
     def console_errors(self):
         out = []
         for event in self.events:

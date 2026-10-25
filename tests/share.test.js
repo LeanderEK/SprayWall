@@ -9,7 +9,6 @@ const climb = (over = {}) => ({
   id: 'b1f3c0de-1111-4222-8333-444455556666',
   name: 'Swoobap',
   grade: 6,
-  stars: 5,
   comment: 'Directional holds.\nSomewhat powerful.',
   author: 'Zeke',
   holds: '122:hand,159:hand,386:start,595:finish',
@@ -20,7 +19,7 @@ const climb = (over = {}) => ({
 const withClimbs = (...climbs) => ({ format: FORMAT, version: 1, wall, climbs });
 
 test('share: a file round trips exactly', () => {
-  const text = shareToText(makeShare(wall, [climb(), climb({ id: 'second-climb-id-0002', name: 'Slab', grade: null, stars: 0 })]));
+  const text = shareToText(makeShare(wall, [climb(), climb({ id: 'second-climb-id-0002', name: 'Slab', grade: null })]));
   const parsed = parseShare(text, NOW);
   assert.eq(parsed.wallKey, 'home-wall');
   assert.eq(parsed.wallName, 'Home wall');
@@ -33,7 +32,7 @@ test('share: a file round trips exactly', () => {
 test('share: only the shared fields leave the phone', () => {
   const extra = climb({ secret: 'no', wallKey: 'x', deletedAt: 5 });
   const share = makeShare(wall, [extra]);
-  assert.eq(Object.keys(share.climbs[0]).sort(), ['author', 'comment', 'createdAt', 'grade', 'holds', 'id', 'name', 'stars', 'updatedAt']);
+  assert.eq(Object.keys(share.climbs[0]).sort(), ['author', 'comment', 'createdAt', 'grade', 'holds', 'id', 'name', 'updatedAt']);
 });
 
 test('share: rejects things that are not climb files, with readable messages', () => {
@@ -68,7 +67,7 @@ test('share: everything from a stranger is cleaned: text capped, numbers forced 
     comment: `\u0000\u0007hello\u001f ${'c'.repeat(5000)}`,
     author: 'a'.repeat(300),
     grade: 99,
-    stars: 17,
+    stars: 5, // an old file's rating: not taken
     holds: '3:hand,3:foot,7:wobble, 9:start,-4:hand,x:hand',
     createdAt: NOW * 5,
     updatedAt: NOW * 5,
@@ -81,7 +80,7 @@ test('share: everything from a stranger is cleaned: text capped, numbers forced 
   assert.eq(out.comment.length, 2000);
   assert.eq(out.author.length, 40);
   assert.eq(out.grade, null);
-  assert.eq(out.stars, 0);
+  assert.ok(!('stars' in out), 'a rating in a file is not taken: a rating belongs to each person');
   assert.eq(out.holds, '3:foot,9:start'); // the later entry for hold 3 wins; unreadable ones are dropped
   assert.ok(out.updatedAt <= NOW + 24 * 3600 * 1000, 'a date in the far future is held to tomorrow at the latest');
   assert.ok(out.createdAt <= out.updatedAt);
@@ -89,7 +88,7 @@ test('share: everything from a stranger is cleaned: text capped, numbers forced 
 
 test('share: missing numbers and dates get sensible values', () => {
   const [out] = parseShare(withClimbs({ id: 'plain-climb-001', name: 'Bare', holds: '1:hand' }), NOW).climbs;
-  assert.eq([out.grade, out.stars, out.comment, out.author], [null, 0, '', '']);
+  assert.eq([out.grade, out.comment, out.author], [null, '', '']);
   assert.eq([out.createdAt, out.updatedAt], [NOW, NOW]);
 });
 

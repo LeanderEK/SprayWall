@@ -1,11 +1,16 @@
 # SprayWall (web version, for iPhone, iPad and anything else)
 
-The same idea as the Android SprayWall app: pick the holds of a climb on your own wall photo, give it a grade, stars and a
-comment, browse and filter your climbs. This version is a web app that you put on your Home Screen. After the first
-visit **everything is saved on the device and it works with no signal**: the app, the wall photo and the climbs.
+The same idea as the Android SprayWall app: pick the holds of a climb on your own wall photo, give it a grade and a
+comment, browse and filter the climbs, rate them with stars. This version is a web app that you put on your Home Screen.
+After the first visit **everything is saved on the device and it works with no signal**: the app, the wall photo and the climbs.
 
-Climbs are shared as a **link** or a **file**. Nothing is uploaded anywhere. (Automatic sync through a free online
-service is stage 2 and is not built yet.)
+Climbs can be shared as a **link** or a **file**, and (once a Firebase project is set up, see "Shared boards" below) uploaded
+to a **shared board** that friends' phones receive automatically.
+
+Every user chooses a **username** the first time the app opens. It goes on every climb they make.
+A new climb is a **draft**: only on that phone, and it can be edited and deleted. Pressing **Upload** on it puts it on
+the shared board, after which **nobody can edit or delete it** (the database's rules allow only adding). **Star ratings are
+private**: each person rates climbs on their own phone and the ratings are never shared.
 
 Your Android app is separate and untouched. The two apps do not talk to each other, but the same climbs can be moved
 between them by file (see "Moving your Android climbs").
@@ -86,23 +91,36 @@ python tools/convert_android_climbs.py <that folder>
 
 It only reads the copy. Each climb always gets the same id, so importing again never doubles anything up.
 
-## Sync with friends (Firebase)
+## Shared boards (Firebase)
 
-Optional. Phones that join the same **board** keep the climbs of a wall the same, automatically: new, edited and deleted
-climbs. Everything still works with no connection; changes are sent, and friends' changes fetched, whenever the app is open
-and online (a couple of seconds after you change something, when you open the app, and every two minutes while it is open).
-iOS does not allow apps to sync in the background, so a phone catches up when the app is next opened.
+Optional. A **board** is a shared set of climbs for one wall. Everyone who has the board's code can see its climbs and
+upload their own.
 
-Only the climbs sync (name, grade, stars, comment, who set it, holds). The wall photo does not: everyone loads the wall pack
-once. A board belongs to one wall (its key, `home-wall`), and a phone can only join a board for a wall it has.
+* **Making climbs**: a new climb is a draft on your phone. Edit it, delete it, share it as a link or file, whatever you like.
+* **Uploading**: open the draft, press **Upload** (top of the climb), confirm. From then on it is final: nobody can edit or
+  delete it, you included, and it carries your username. Only climbs you made (with your username on them) can be uploaded.
+* **Receiving**: climbs other people upload arrive on their own, a few seconds after the app opens, when the connection
+  returns and every two minutes while it is open. They are final too, and show as Uploaded. (iOS does not allow background
+  work, so a phone catches up when the app is next opened.)
+* **Your climbs**: the Filters panel has **Show: All climbs / My climbs / My drafts**. A small "Draft" tag marks drafts.
+* **Ratings**: tap the stars in a climb's info panel. They stay on your phone. The list's "Your stars" filter and the
+  "Top rated" sort use your own ratings.
+* **Username**: chosen once. It can be changed until the first of your climbs is uploaded; after that it is locked. Names are
+  not checked against anyone: the board code is the real gate, so only give it to friends.
+* **The board code** is 16 random letters and digits (`k7f2-9xqm-c4ta-p8dn`); nobody can list or guess boards. It is shown
+  under share icon → Sync with friends. Stopping on a phone keeps all its climbs.
+* A board belongs to one wall (its key, `home-wall`); a phone can only join a board for a wall it has.
+* Only climbs go on the board (name, grade, comment, author, holds). Not the wall photo, not ratings.
+* Existing climbs from before usernames and ratings are kept: they take your username, and their old star counts became your
+  own ratings. If something is wrong with a climb you uploaded, only the project owner can remove it, in the Firebase console
+  (Firestore Database → Data).
 
-**The board code is the password.** It is 16 random letters and digits (`k7f2-9xqm-c4ta-p8dn`); nobody can list or guess
-boards. Whoever has the code can see, add, change and delete the climbs on the board, so give it only to friends. The app
-shows it under share icon → Sync with friends. Stopping sync on a phone keeps its climbs.
+The shared database stamps each climb with its own clock, so a phone with a wrong clock cannot make others miss climbs.
 
-How a merge works: for each climb the newer change wins. A climb that was deleted stays on the board as a small marker, so a
-phone that was offline cannot bring it back (unless someone edited it after the deletion, which wins). The shared database
-stamps every change with its own clock, so a phone with a wrong clock cannot make others miss changes.
+Size: a typical climb is about 350 bytes of data plus about 2 KB of automatic indexes, roughly 2.4 KB (Google's size rules),
+so the free 1 GiB holds around 400,000 climbs. Switching the indexes off for the fields that are never searched would shrink
+that to about 0.6 KB, which is not worth the clicking. The free daily limits (50,000 reads, 20,000 writes) matter more, and a
+friend group stays far below them: joining a board reads each climb once, then a check with nothing new costs one read.
 
 ### Setting up the Firebase project (once, free, about 10 minutes)
 
@@ -117,6 +135,8 @@ stamps every change with its own clock, so a phone with a wrong clock cannot mak
    Register app (leave Hosting off). The config shows `apiKey` and `projectId`.
 6. Put them in `site/src/sync-config.js` (replace `null`), run the tests, push. The share icon then has "Sync with friends".
 7. Prove it against the real project: `tools\.venv\Scripts\python.exe tools\firebase_check.py` (leaves one test board).
+
+If the rules in `firebase/firestore.rules` ever change, paste the new ones into the console again (step 3).
 
 The two values are not secrets (every phone running the app has them); the rules decide who may do what. GitHub may email a
 warning about a Google API key in the repository; for a Firebase web key that is expected. To tighten it further, in Google

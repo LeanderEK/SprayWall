@@ -56,7 +56,8 @@ export async function openSyncSheet() {
     } else if (!setup) {
       const codeInput = h('input', { class: 'field', type: 'text', placeholder: 'k7f2-9xqm-c4ta-p8dn', 'aria-label': 'Board code', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false' });
       pieces.push(
-        h('p', {}, `Climbs on “${wall.name}” are kept the same on every phone that joins your board: new, changed and deleted climbs. It works with no connection too, and catches up whenever you open the app online.`),
+        h('p', {}, `A board lets friends share climbs on “${wall.name}”. Climbs you make stay on your phone as drafts. When one is ready, press Upload on it and everyone on the board gets it. New climbs from friends arrive by themselves whenever the app is open and online.`),
+        h('p', { class: 'note' }, 'An uploaded climb can never be edited or deleted, by anyone. Star ratings stay on each person’s own phone.'),
         h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn primary', disabled: busy, onclick: () => run(async () => { await sync.createBoard(wall.key); }) }, 'Start a board')),
         h('h3', {}, 'Or join a friend’s board'),
         h('label', { class: 'field-label' }, 'Board code', codeInput),
@@ -71,9 +72,9 @@ export async function openSyncSheet() {
         h('div', { class: 'row-buttons' },
           h('button', { type: 'button', class: 'btn', onclick: async () => toast((await copyText(code)) ? 'Code copied.' : 'Could not copy the code.') }, 'Copy'),
           h('button', { type: 'button', class: 'btn', onclick: () => shareText(`Join my SprayWall board for “${wall.name}”: ${code}\nIn SprayWall tap the share button, then Sync with friends, then Join.`, 'SprayWall board') }, 'Share')),
-        h('p', { class: 'note' }, 'Anyone who has this code can see, add, change and delete the climbs on this board. Only give it to people you trust.'),
+        h('p', { class: 'note' }, 'Anyone who has this code can see the climbs on this board and upload their own. Uploaded climbs can never be edited or deleted. Only give the code to people you trust.'),
         h('div', { class: state.status === 'error' ? 'sync-status bad' : 'sync-status' }, syncStatusText(state, setup)),
-        h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn', disabled: busy || state.status === 'syncing', onclick: () => run(() => sync.syncWall(wall.key)) }, 'Sync now')),
+        h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn', disabled: busy || state.status === 'syncing', onclick: () => run(() => sync.syncWall(wall.key)) }, 'Check for new climbs')),
         h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'text-btn danger', onclick: stopSyncing }, 'Stop syncing on this phone')),
       );
     }
@@ -83,7 +84,7 @@ export async function openSyncSheet() {
   }
 
   async function stopSyncing() {
-    if (!(await confirmDialog({ title: 'Stop syncing?', text: 'Your climbs stay on this phone. They just stop being shared. You can rejoin later with the board code.', confirmLabel: 'Stop syncing', danger: true }))) return;
+    if (!(await confirmDialog({ title: 'Stop syncing?', text: 'Climbs on this phone stay, uploaded ones too. You just stop getting new ones and cannot upload. You can rejoin later with the board code.', confirmLabel: 'Stop syncing', danger: true }))) return;
     await sync.stop(wall.key);
     render();
   }

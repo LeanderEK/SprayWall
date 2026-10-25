@@ -1,8 +1,10 @@
 import { app, wallPicture } from '../app.js';
-import { browseIds, gradeLabel, marksOf } from '../domain/climbs.js';
+import { browseIds, gradeLabel, isMine, isUploaded, marksOf } from '../domain/climbs.js';
+import { SyncError } from '../domain/sync.js';
 import { confirmDialog, h, icon, iconButton, openSheet, stars, toast } from './dom.js';
 import { appBar } from './list.js';
 import { copyClimbLink, shareClimbFile, shareClimbLink } from './sharing.js';
+import { openSyncSheet } from './syncsheet.js';
 import { PAINT, WallView } from './wallview.js';
 
 /** Looking at a climb. Swiping left or right goes to the next or previous climb in the list (with its search, filters and sort). */
@@ -14,9 +16,12 @@ export async function mountViewer(root, { id }) {
     root.append(appBar({ title: 'Climb', back: () => nav.back('/') }), h('div', { class: 'empty' }, h('h2', {}, 'This climb is not here any more'), h('button', { type: 'button', class: 'btn', onclick: () => nav.replace('/') }, 'Back to the list')));
     return {};
   }
-  const all = await repo.listClimbs(wall.key);
+  // Each climb carries your own star rating as `stars` (ratings are kept on this phone only).
+  const ratings = await repo.getRatings();
+  const me = await repo.authorName();
+  const all = (await repo.listClimbs(wall.key)).map((climb) => ({ ...climb, stars: ratings.get(climb.id) || 0 }));
   const byId = new Map(all.map((climb) => [climb.id, climb]));
-  const ids = browseIds(all, app.query, id);
+  const ids = browseIds(all, app.query, id, me);
   const picture = await wallPicture(wall);
   let index = ids.indexOf(id);
   let showWhole = false;
@@ -36,11 +41,15 @@ export async function mountViewer(root, { id }) {
 
   const count = h('div', { class: 'bar-count' });
   const eye = iconButton('eye', 'Show the whole wall', toggleWhole);
-  const bar = h('header', { class: 'bar' }, iconButton('back', 'Back', () => nav.back('/')), h('div', { class: 'bar-title' }, count), h('div', { class: 'bar-actions' }, eye, iconButton('info', 'Climb info', showDetails), iconButton('share', 'Share this climb', share), iconButton('edit', 'Edit climb', () => nav.go(`/edit/${current().id}`)), iconButton('trash', 'Delete climb', remove)));
-  // The name and grade sit in a small strip above the wall; the rest (stars, who set it, the comment) is behind the info button.
+  // A climb on a shared board can no longer be changed or deleted, so those two buttons only show for drafts.
+  const editButton = iconButton('edit', 'Edit climb', () => nav.go(`/edit/${current().id}`));
+  const deleteButton = iconButton('trash', 'Delete climb', remove);
+  const bar = h('header', { class: 'bar' }, iconButton('back', 'Back', () => nav.back('/')), h('div', { class: 'bar-title' }, count), h('div', { class: 'bar-actions' }, eye, iconButton('info', 'Climb info', showDetails), iconButton('share', 'Share this climb', share), editButton, deleteButton));
+  // The name and grade sit in a small strip above the wall; the rest (your stars, who set it, the comment) is behind the info button.
   const nameEl = h('div', { class: 'caption-name' });
   const gradeEl = h('div', { class: 'caption-grade' });
-  const caption = h('div', { class: 'caption' }, nameEl, gradeEl);
+  const uploadSlot = h('div', { class: 'caption-upload' });
+  const caption = h('div', { class: 'caption' }, nameEl, uploadSlot, gradeEl);
   root.append(bar, caption, pager);
 
   function setTrack(dx, animate) {
@@ -63,6 +72,10 @@ export async function mountViewer(root, { id }) {
     const climb = current();
     nameEl.textContent = climb.name;
     gradeEl.textContent = gradeLabel(climb.grade);
+    const uploaded = isUploaded(climb);
+    editButton.hidden = uploaded;
+    deleteButton.hidden = uploaded;
+    uploadSlot.replaceChildren(uploaded ? h('span', { class: 'tag' }, 'Uploaded') : isMine(climb, me) ? h('button', { type: 'button', class: 'pill-btn', onclick: uploadCurrent }, 'Upload') : null);
     count.textContent = ids.length > 1 ? `${index + 1} of ${ids.length}` : '';
     eye.setAttribute('aria-label', showWhole ? 'Dim the wall again' : 'Show the whole wall');
   }
@@ -70,16 +83,39 @@ export async function mountViewer(root, { id }) {
   /** The info button: grade, stars, who set it and the comment, for the climb on screen. */
   function showDetails() {
     const climb = current();
+    const ratingBox = h('div', {});
+    const paintRating = () => ratingBox.replaceChildren(stars(climb.stars, { size: 30, onSelect: async (value) => { climb.stars = await repo.setRating(climb.id, value); paintRating(); } }));
+    paintRating();
     openSheet(
       climb.name,
       h(
         'div',
         { class: 'sheet-body' },
-        h('div', { class: 'detail-head' }, h('div', { class: 'detail-grade' }, gradeLabel(climb.grade)), stars(climb.stars, { size: 22 })),
-        climb.author ? h('div', { class: 'detail-author' }, `by ${climb.author}`) : null,
+        h('div', { class: 'detail-head' }, h('div', { class: 'detail-grade' }, gradeLabel(climb.grade)), h('div', { class: 'detail-by' }, climb.author ? `by ${climb.author}` : '', isUploaded(climb) ? h('span', { class: 'tag' }, 'Uploaded') : isMine(climb, me) ? h('span', { class: 'tag draft' }, 'Draft') : null)),
+        h('div', { class: 'detail-rate' }, h('div', { class: 'detail-label' }, 'Your rating (only on this phone)'), ratingBox),
         h('div', { class: climb.comment ? 'detail-comment' : 'detail-comment none' }, climb.comment || 'No comment.'),
       ),
     );
+  }
+
+  /** Uploads the draft on screen to the shared board, after asking: it cannot be changed or deleted afterwards. */
+  async function uploadCurrent() {
+    const climb = current();
+    if (!app.sync?.available) return toast('Uploading needs a shared board, which is not switched on in this app yet.');
+    if (!(await repo.getSyncSetup(climb.wallKey))) {
+      toast('Start or join a board for this wall first.');
+      return openSyncSheet();
+    }
+    const sure = await confirmDialog({ title: 'Upload this climb?', text: `“${climb.name}” will be shared with everyone on the board as ${climb.author}. After that nobody can edit or delete it, you included.`, confirmLabel: 'Upload' });
+    if (!sure) return;
+    try {
+      await app.sync.upload(climb.id);
+      byId.set(climb.id, { ...(await repo.getClimb(climb.id)), stars: climb.stars });
+      showInfo();
+      toast('Uploaded. It is on the board now.');
+    } catch (error) {
+      toast(error instanceof SyncError ? error.message : 'Could not upload that climb.');
+    }
   }
 
   function settle(direction) {

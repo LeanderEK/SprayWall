@@ -1,17 +1,17 @@
-import { cleanWallName } from '../domain/climbs.js';
+import { MAX_STARS, cleanUsername, cleanWallName, isMine, sameName } from '../domain/climbs.js';
 import { makeShare } from '../domain/share.js';
-import { decideRemote, syncMark, versionOf } from '../domain/sync.js';
 
 // Everything the app remembers, behind one object. It talks to a "store" with four calls (get, put, remove, all) over
 // three tables: walls (keyed by `key`), climbs (keyed by `id`) and meta (keyed by `k`). The real app uses IndexedDB
 // (db.js); the tests use a store that lives in memory.
 //
 // A wall is { key, name, image (a Blob), imageWidth, imageHeight, holds, angle, updatedAt }.
-// A climb is { id, wallKey, name, grade, stars, comment, author, holds, createdAt, updatedAt } and, once deleted, keeps
+// A climb is { id, wallKey, name, grade, comment, author, holds, createdAt, updatedAt } and, once deleted, keeps
 // only { id, wallKey, name, deletedAt, updatedAt }. The deleted record is a marker that stops an old copy of the climb,
 // arriving later in a shared file, from bringing it back.
-// A climb that is kept in sync also carries a `syncMark` ("<board code>:<version>") saying which version of it the shared
-// board has. Any change made here builds the climb afresh, which drops the mark, and that is how "needs sending" is known.
+// A climb starts as a draft: only on this phone, and it can be changed or deleted. Uploading it to a shared board gives it a
+// `publishedAt`; from then on it can never be changed or deleted (a climb that came from a board has one too).
+// Star ratings are the owner's own and stay on this phone, in the meta table as `rating:<climb id>`. The username is meta `author`.
 
 export const newId = () => {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -78,8 +78,77 @@ export class Repo {
     else await this.#put('meta', { k, value });
   }
 
-  /** The name that goes on the climbs you set. */
+  /** The username that goes on the climbs you set ('' until one has been chosen). */
   authorName = async () => (await this.getMeta('author')) || '';
+
+  /**
+   * Chooses (or changes) the username. The first time, climbs on this phone that have no name on them are yours and take it.
+   * Once any climb of yours is uploaded the name is on a shared board for good, so it can no longer be changed.
+   * Returns the cleaned name, or throws an Error saying why not.
+   */
+  async setUsername(text) {
+    const name = cleanUsername(text);
+    if (name === null) throw new Error('A username is 2 to 20 letters, digits, spaces, dots, dashes or underscores.');
+    const old = await this.authorName();
+    if (old && !sameName(old, name) && !(await this.canChangeUsername())) throw new Error('You have uploaded climbs under your current username, so it cannot be changed.');
+    await this.#put('meta', { k: 'author', value: name });
+    for (const climb of await this.store.all('climbs')) {
+      if (climb.deletedAt) continue;
+      const unnamed = climb.author === '' || climb.author === undefined;
+      const mineBefore = old && sameName(climb.author, old) && !climb.publishedAt; // drafts follow a name change
+      if (unnamed || mineBefore) await this.#put('climbs', { ...climb, author: name });
+    }
+    this.#changed();
+    return name;
+  }
+
+  /** True while none of your climbs is on a shared board. */
+  async canChangeUsername() {
+    const me = await this.authorName();
+    return !(await this.store.all('climbs')).some((climb) => !climb.deletedAt && climb.publishedAt && isMine(climb, me));
+  }
+
+  // ---- star ratings (kept on this phone only) ----
+
+  /** Every rating you have given: a Map from climb id to 1-5. */
+  async getRatings() {
+    const ratings = new Map();
+    for (const { k, value } of await this.store.all('meta')) {
+      if (k.startsWith('rating:') && Number.isInteger(value) && value >= 1 && value <= MAX_STARS) ratings.set(k.slice(7), value);
+    }
+    return ratings;
+  }
+
+  /** Your rating of a climb (0 if you have not rated it). */
+  async getRating(id) {
+    const value = await this.getMeta(`rating:${id}`);
+    return Number.isInteger(value) && value >= 1 && value <= MAX_STARS ? value : 0;
+  }
+
+  /** Rates a climb 1-5, or with 0 takes the rating away. */
+  async setRating(id, stars) {
+    const clean = Math.max(0, Math.min(MAX_STARS, Math.round(Number(stars) || 0)));
+    if (clean === 0) await this.store.remove('meta', `rating:${id}`);
+    else await this.#put('meta', { k: `rating:${id}`, value: clean });
+    this.#changed();
+    return clean;
+  }
+
+  /**
+   * Brings data from before ratings were separate up to date: a climb's own `stars` becomes your rating of it, and the field
+   * goes. Safe to run every time the app starts. Returns how many climbs it touched.
+   */
+  async upgradeData() {
+    let touched = 0;
+    for (const climb of await this.store.all('climbs')) {
+      if (!('stars' in climb)) continue;
+      const { stars, ...rest } = climb;
+      if (stars > 0 && !climb.deletedAt && !(await this.getRating(climb.id))) await this.#put('meta', { k: `rating:${climb.id}`, value: Math.min(MAX_STARS, stars) });
+      await this.#put('climbs', rest);
+      touched++;
+    }
+    return touched;
+  }
 
   // ---- walls ----
 
@@ -156,21 +225,22 @@ export class Repo {
     return climb && !climb.deletedAt ? climb : undefined;
   }
 
-  /** Saves a new climb (no `id`), or changes an existing one. Returns the saved climb. */
-  async saveClimb({ id, wallKey, name, grade, stars, comment, holds }) {
+  /** Saves a new climb (no `id`), or changes a draft. A climb that is on a shared board cannot be changed. Returns the saved climb. */
+  async saveClimb({ id, wallKey, name, grade, comment, holds }) {
     const now = this.now();
     const old = id ? await this.store.get('climbs', id) : undefined;
+    if (old && !old.deletedAt && old.publishedAt) throw new Error('This climb is on a shared board, so it cannot be changed.');
+    const live = old && !old.deletedAt;
     const climb = {
       id: old ? old.id : newId(),
       wallKey: old ? old.wallKey : wallKey,
       name: name.trim(),
       grade: grade ?? null,
-      stars,
       comment: comment.trim(),
       // The setter is whoever made the climb; editing someone else's climb does not take the credit.
-      author: old && !old.deletedAt ? old.author : await this.authorName(),
+      author: live ? old.author : await this.authorName(),
       holds,
-      createdAt: old && !old.deletedAt ? old.createdAt : now,
+      createdAt: live ? old.createdAt : now,
       updatedAt: Math.max(now, old ? old.updatedAt + 1 : 0),
     };
     await this.#put('climbs', climb);
@@ -178,17 +248,29 @@ export class Repo {
     return climb;
   }
 
+  /** Deletes a draft. A climb that is on a shared board cannot be deleted. */
   async deleteClimb(id) {
     const climb = await this.store.get('climbs', id);
     if (!climb || climb.deletedAt) return;
+    if (climb.publishedAt) throw new Error('This climb is on a shared board, so it cannot be deleted.');
     const now = this.now();
     await this.#put('climbs', { id, wallKey: climb.wallKey, name: climb.name, deletedAt: now, updatedAt: now });
     this.#changed();
   }
 
-  // ---- syncing with a shared board (the steps are in sync.js) ----
+  /** Notes that a draft is now on the shared board. From here on it cannot be changed or deleted. */
+  async markPublished(id) {
+    const climb = await this.store.get('climbs', id);
+    if (!climb || climb.deletedAt || climb.publishedAt) return climb;
+    const published = { ...climb, publishedAt: this.now() };
+    await this.#put('climbs', published);
+    this.#changed();
+    return published;
+  }
 
-  /** The board a wall is kept in sync with: { code, lastPull, lastSyncedAt }, or undefined. */
+  // ---- the shared board (the steps are in sync.js) ----
+
+  /** The board a wall is attached to: { code, lastPull, lastSyncedAt }, or undefined. */
   getSyncSetup(wallKey) {
     return this.getMeta(`sync:${wallKey}`);
   }
@@ -198,43 +280,22 @@ export class Repo {
     return this.setMetaQuietly(`sync:${wallKey}`, setup);
   }
 
-  /** Every climb of the wall, deleted ones too, that the board `code` does not have the current version of. */
-  async climbsToSend(wallKey, code) {
-    return (await this.store.all('climbs')).filter((climb) => climb.wallKey === wallKey && climb.syncMark !== syncMark(code, climb));
-  }
-
-  /** Notes that these climbs, as they were when sent, are now on the board. A climb changed since then stays unsent. */
-  async markSent(code, sent) {
-    for (const was of sent) {
-      const now = await this.store.get('climbs', was.id);
-      if (now && versionOf(now) === versionOf(was)) await this.#put('climbs', { ...now, syncMark: syncMark(code, now) });
-    }
-  }
-
   /**
-   * Takes in climbs from the board (already checked and cleaned). Each is added, replaces yours, deletes yours or is
-   * ignored, as decideRemote says. Returns how many were added, updated and deleted.
+   * Takes in climbs from the board (already checked and cleaned). The board is final: a climb you do not have is added, and a
+   * draft of yours with the same id becomes the board's version. Climbs already published here are left alone.
+   * Returns how many were added and how many drafts were replaced.
    */
-  async applySynced(wallKey, code, remotes) {
-    const counts = { added: 0, updated: 0, deleted: 0 };
+  async applyPublished(wallKey, remotes) {
+    const counts = { added: 0, replaced: 0 };
     for (const remote of remotes) {
       const mine = await this.store.get('climbs', remote.id);
       if (mine && mine.wallKey !== wallKey) continue; // the same id on another wall here: leave it alone
-      const action = decideRemote(mine, remote);
+      if (mine && !mine.deletedAt && mine.publishedAt) continue;
       const { serverTime, ...fields } = remote;
-      if (action === 'add' || action === 'update') {
-        const climb = { ...fields, wallKey };
-        await this.#put('climbs', { ...climb, syncMark: syncMark(code, climb) });
-        counts[action === 'add' ? 'added' : 'updated']++;
-      } else if (action === 'delete' || action === 'remember') {
-        const gone = { id: remote.id, wallKey, name: remote.name, deletedAt: remote.deletedAt, updatedAt: remote.deletedAt };
-        await this.#put('climbs', { ...gone, syncMark: syncMark(code, gone) });
-        if (action === 'delete') counts.deleted++;
-      } else if (action === 'same' && mine.syncMark !== syncMark(code, mine)) {
-        await this.#put('climbs', { ...mine, syncMark: syncMark(code, mine) });
-      }
+      await this.#put('climbs', { ...fields, wallKey, publishedAt: this.now() });
+      counts[mine && !mine.deletedAt ? 'replaced' : 'added']++;
     }
-    if (counts.added + counts.updated + counts.deleted > 0) this.#changed();
+    if (counts.added + counts.replaced > 0) this.#changed();
     return counts;
   }
 
@@ -260,6 +321,7 @@ export class Repo {
       let status;
       if (!mine) status = 'new';
       else if (mine.deletedAt) status = climb.updatedAt > mine.deletedAt ? 'new' : 'deleted';
+      else if (mine.publishedAt) status = 'same'; // on a shared board, so it is final
       else if (climb.updatedAt > mine.updatedAt) status = 'update';
       else if (climb.updatedAt === mine.updatedAt) status = 'same';
       else status = 'older';
@@ -273,9 +335,11 @@ export class Repo {
     if (!plan.wallKnown) throw new Error('The wall for these climbs has not been imported yet.');
     let added = 0;
     let updated = 0;
+    const me = await this.authorName();
     for (const { climb, status } of plan.items) {
       if (status !== 'new' && status !== 'update') continue;
-      await this.#put('climbs', { ...climb, wallKey: plan.wallKey });
+      // A climb with nobody's name on it (a file from before usernames) is taken to be the importer's own.
+      await this.#put('climbs', { ...climb, author: climb.author || me, wallKey: plan.wallKey });
       if (status === 'new') added++;
       else updated++;
     }

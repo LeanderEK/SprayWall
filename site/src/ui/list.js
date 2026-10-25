@@ -1,5 +1,5 @@
 import { app, wallPicture } from '../app.js';
-import { MAX_GRADE, SORTS, applyQuery, defaultQuery, filterCount, gradeFiltered, gradeLabel, marksOf } from '../domain/climbs.js';
+import { MAX_GRADE, SCOPES, SORTS, applyQuery, defaultQuery, filterCount, gradeFiltered, gradeLabel, isMine, isUploaded, marksOf } from '../domain/climbs.js';
 import { h, icon, iconButton, isIos, isStandalone, openSheet, stars } from './dom.js';
 import { openSharingSheet } from './sharing.js';
 import { PAINT, drawThumb } from './wallview.js';
@@ -21,6 +21,7 @@ export function filterSummary(query) {
   const parts = [];
   if (gradeFiltered(query)) parts.push(query.minGrade === query.maxGrade ? gradeLabel(query.minGrade) : `${gradeLabel(query.minGrade)}–${gradeLabel(query.maxGrade)}`);
   if (query.minStars > 0) parts.push(`${query.minStars}★+`);
+  if (query.scope && query.scope !== 'all') parts.push(SCOPES.find(([value]) => value === query.scope)?.[1] ?? query.scope);
   return parts.length ? parts.join(' · ') : 'Filters';
 }
 
@@ -29,6 +30,7 @@ export async function mountList(root) {
   let wall = null;
   let picture = null;
   let climbs = [];
+  let me = '';
   let alive = true;
 
   const rows = h('div', { class: 'rows' });
@@ -49,7 +51,9 @@ export async function mountList(root) {
     const minSlider = h('input', { type: 'range', min: 0, max: MAX_GRADE, step: 1, value: q.minGrade, 'aria-label': 'Easiest grade' });
     const maxSlider = h('input', { type: 'range', min: 0, max: MAX_GRADE, step: 1, value: q.maxGrade, 'aria-label': 'Hardest grade' });
     const starChips = h('div', { class: 'chip-row wrap' });
+    const scopeChips = h('div', { class: 'chip-row wrap' });
     const refresh = () => {
+      scopeChips.replaceChildren(...SCOPES.map(([value, label]) => h('button', { type: 'button', class: value === (q.scope || 'all') ? 'chip selected' : 'chip', onclick: () => { q.scope = value; refresh(); renderRows(); } }, label)));
       gradeText.textContent = gradeFiltered(q) ? `${gradeLabel(q.minGrade)} – ${gradeLabel(q.maxGrade)}` : 'any';
       starChips.replaceChildren(...[0, 1, 2, 3, 4, 5].map((n) => h('button', { type: 'button', class: n === q.minStars ? 'chip selected' : 'chip', onclick: () => { q.minStars = n; refresh(); renderRows(); } }, n === 0 ? 'Any' : `${n}★+`)));
       renderRows();
@@ -57,12 +61,12 @@ export async function mountList(root) {
     minSlider.addEventListener('input', () => { q.minGrade = Math.min(Number(minSlider.value), q.maxGrade); minSlider.value = q.minGrade; refresh(); });
     maxSlider.addEventListener('input', () => { q.maxGrade = Math.max(Number(maxSlider.value), q.minGrade); maxSlider.value = q.maxGrade; refresh(); });
     const reset = () => {
-      Object.assign(q, { minGrade: 0, maxGrade: MAX_GRADE, minStars: 0 });
+      Object.assign(q, { minGrade: 0, maxGrade: MAX_GRADE, minStars: 0, scope: 'all' });
       minSlider.value = 0;
       maxSlider.value = MAX_GRADE;
       refresh();
     };
-    openSheet('Filters', h('div', { class: 'sheet-body' }, h('div', { class: 'row-between' }, h('h3', {}, 'Grade'), gradeText), h('div', { class: 'range-pair' }, h('span', {}, 'Easiest'), minSlider, h('span', {}, 'Hardest'), maxSlider), h('h3', {}, 'Stars'), starChips, h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'text-btn', onclick: reset }, 'Reset'))));
+    openSheet('Filters', h('div', { class: 'sheet-body' }, h('div', { class: 'row-between' }, h('h3', {}, 'Grade'), gradeText), h('div', { class: 'range-pair' }, h('span', {}, 'Easiest'), minSlider, h('span', {}, 'Hardest'), maxSlider), h('h3', {}, 'Your stars'), starChips, h('h3', {}, 'Show'), scopeChips, h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'text-btn', onclick: reset }, 'Reset'))));
     refresh();
   }
 
@@ -81,7 +85,7 @@ export async function mountList(root) {
       return;
     }
     fab.hidden = false;
-    const shown = applyQuery(climbs, app.query);
+    const shown = applyQuery(climbs, app.query, me);
     if (climbs.length === 0) {
       rows.replaceChildren(emptyState('No climbs yet', 'Pick a hold type, tap the holds on your wall, and save the climb. Or import climbs a friend sent you.', 'Set the first climb', () => nav.go('/edit/new')));
       return;
@@ -98,7 +102,7 @@ export async function mountList(root) {
         'button',
         { type: 'button', class: 'row', onclick: () => nav.go(`/climb/${climb.id}`) },
         thumb,
-        h('div', { class: 'row-text' }, h('div', { class: 'row-name' }, climb.name), stars(climb.stars, { size: 16 }), climb.comment ? h('div', { class: 'row-comment' }, climb.comment) : null, climb.author ? h('div', { class: 'row-author' }, `by ${climb.author}`) : null),
+        h('div', { class: 'row-text' }, h('div', { class: 'row-name' }, climb.name), stars(climb.stars, { size: 16 }), climb.comment ? h('div', { class: 'row-comment' }, climb.comment) : null, climb.author || !isUploaded(climb) ? h('div', { class: 'row-author' }, climb.author ? `by ${climb.author}` : '', isMine(climb, me) && !isUploaded(climb) ? h('span', { class: 'badge muted' }, 'Draft') : null) : null),
         h('div', { class: 'row-grade' }, gradeLabel(climb.grade)),
       );
     });
@@ -108,7 +112,9 @@ export async function mountList(root) {
   async function load() {
     wall = await repo.activeWall();
     title.textContent = wall ? wall.name : 'SprayWall';
-    climbs = wall ? await repo.listClimbs(wall.key) : [];
+    me = await repo.authorName();
+    const ratings = await repo.getRatings();
+    climbs = wall ? (await repo.listClimbs(wall.key)).map((climb) => ({ ...climb, stars: ratings.get(climb.id) || 0 })) : [];
     picture = wall ? await wallPicture(wall) : null;
     renderRows();
   }

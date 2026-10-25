@@ -1,6 +1,7 @@
 // A stand-in for Firebase, good enough to run the real sync code against: it answers the same web requests, in the same
-// shapes, that data/firestore.js sends (anonymous sign-in, token refresh, create a board, read a board, commit climbs
-// with a server time stamp, run the "newer than" query). It also checks what the real database's rules would check.
+// shapes, that data/firestore.js sends (anonymous sign-in, token refresh, create a board, read a board, add a climb with a
+// server time stamp, read one, run the "newer than" query). It also checks what the real database's rules would check:
+// climbs can only be added, never changed or deleted.
 // It is written from Google's documentation; the live project is the final proof (tools/firebase_check.py).
 
 export class FakeFirebase {
@@ -83,13 +84,18 @@ export class FakeFirebase {
       const fields = json.fields || {};
       const keys = Object.keys(fields);
       const ok = /^[a-z2-9]{16}$/.test(code || '') && keys.every((key) => ['wallKey', 'wallName', 'createdAt'].includes(key)) && fields.wallKey?.stringValue !== undefined && fields.wallName?.stringValue !== undefined && fields.createdAt?.integerValue !== undefined;
-      if (!ok) return reply(403, { error: { code: 403, status: 'PERMISSION_DENIED', message: 'Missing or insufficient permissions.' } });
+      if (!ok) return reply(403, DENIED);
       if (this.docs.has(`boards/${code}`)) return reply(409, { error: { code: 409, status: 'ALREADY_EXISTS', message: 'Document already exists' } });
       this.docs.set(`boards/${code}`, { fields });
       return reply(200, { name: `projects/${this.projectId}/databases/(default)/documents/boards/${code}`, fields });
     }
 
     if (method === 'GET' && /^boards\/[^/]+$/.test(path)) {
+      const doc = this.docs.get(path);
+      return doc ? reply(200, { name: `projects/${this.projectId}/databases/(default)/documents/${path}`, fields: doc.fields }) : reply(404, { error: { code: 404, status: 'NOT_FOUND', message: 'Document not found' } });
+    }
+
+    if (method === 'GET' && /^boards\/[^/]+\/climbs\/[^/]+$/.test(path)) {
       const doc = this.docs.get(path);
       return doc ? reply(200, { name: `projects/${this.projectId}/databases/(default)/documents/${path}`, fields: doc.fields }) : reply(404, { error: { code: 404, status: 'NOT_FOUND', message: 'Document not found' } });
     }
@@ -102,14 +108,19 @@ export class FakeFirebase {
         const match = /\/documents\/(boards\/([a-z2-9]{16})\/climbs\/([^/]+))$/.exec(name);
         const transforms = write.updateTransforms || [];
         const fields = { ...(write.update?.fields || {}) };
-        if (!match || transforms.length !== 1 || transforms[0].fieldPath !== 'serverTime' || transforms[0].setToServerValue !== 'REQUEST_TIME') return reply(403, { error: { code: 403, status: 'PERMISSION_DENIED', message: 'Missing or insufficient permissions.' } });
+        if (!match || transforms.length !== 1 || transforms[0].fieldPath !== 'serverTime' || transforms[0].setToServerValue !== 'REQUEST_TIME') return reply(403, DENIED);
+        // Only adding is allowed: without "does not exist yet" it could be a replacement, and the rules have no such rule.
+        if (write.currentDocument?.exists !== false) return reply(403, DENIED);
+        if (this.docs.has(match[1])) return reply(409, { error: { code: 409, status: 'ALREADY_EXISTS', message: 'Document already exists' } });
         fields.serverTime = { timestampValue: stamp };
-        if (!climbIsValid(fields, match[3])) return reply(403, { error: { code: 403, status: 'PERMISSION_DENIED', message: 'Missing or insufficient permissions.' } });
+        if (!climbIsValid(fields, match[3])) return reply(403, DENIED);
         staged.push([match[1], { fields }]);
       }
       for (const [docPath, doc] of staged) this.docs.set(docPath, doc);
       return reply(200, { writeResults: staged.map(() => ({ updateTime: stamp })), commitTime: stamp });
     }
+
+    if (method === 'PATCH' || method === 'DELETE' || method === 'PUT') return reply(403, DENIED); // nothing is ever changed or deleted
 
     const query = /^boards\/([a-z2-9]{16}):runQuery$/.exec(path);
     if (method === 'POST' && query) {
@@ -133,17 +144,20 @@ export class FakeFirebase {
   }
 }
 
+const DENIED = { error: { code: 403, status: 'PERMISSION_DENIED', message: 'Missing or insufficient permissions.' } };
+
 /** What firebase/firestore.rules asks of a climb. */
 function climbIsValid(fields, id) {
-  const allowed = ['id', 'name', 'grade', 'stars', 'comment', 'author', 'holds', 'createdAt', 'updatedAt', 'deletedAt', 'serverTime'];
+  const allowed = ['name', 'grade', 'comment', 'author', 'holds', 'createdAt', 'serverTime'];
   const keys = Object.keys(fields);
   if (!keys.every((key) => allowed.includes(key))) return false;
-  if (!['id', 'name', 'updatedAt', 'serverTime'].every((key) => keys.includes(key))) return false;
-  const text = (key, max) => fields[key] === undefined || (typeof fields[key].stringValue === 'string' && fields[key].stringValue.length <= max);
+  if (!['name', 'author', 'holds', 'createdAt', 'serverTime'].every((key) => keys.includes(key))) return false;
+  const text = (key, min, max) => fields[key] === undefined || (typeof fields[key].stringValue === 'string' && fields[key].stringValue.length >= min && fields[key].stringValue.length <= max);
   const whole = (key, low, high) => fields[key] === undefined || (fields[key].integerValue !== undefined && Number(fields[key].integerValue) >= low && Number(fields[key].integerValue) <= high);
-  return fields.id.stringValue === id && /^[A-Za-z0-9_-]{8,64}$/.test(id) && text('name', 80) && fields.updatedAt.integerValue !== undefined
-    && whole('grade', 0, 17) && whole('stars', 0, 5) && text('comment', 2000) && text('author', 40) && text('holds', 20000)
-    && whole('createdAt', 0, Infinity) && whole('deletedAt', 0, Infinity);
+  const holds = fields.holds.stringValue ?? '';
+  return /^[A-Za-z0-9_-]{8,64}$/.test(id) && text('name', 1, 80) && text('author', 2, 40) && text('holds', 0, 20000) && text('comment', 0, 2000)
+    && /^[0-9]+:(start|hand|foot|finish)(,[0-9]+:(start|hand|foot|finish))*$/.test(holds)
+    && whole('grade', 0, 17) && whole('createdAt', 0, Infinity) && fields.createdAt.integerValue !== undefined;
 }
 
 function reply(status, data) {

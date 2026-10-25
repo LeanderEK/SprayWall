@@ -45,6 +45,7 @@ def main():
     try:
         for phone in (you, friend, stranger):
             phone.go(base)
+            phone.choose_username()
         you.eval(LOAD_WALL)
         you.eval(LOAD_CLIMBS)
         friend.eval(LOAD_WALL)
@@ -76,17 +77,17 @@ def main():
             """(async () => {
                 const { app } = await import('/site/src/app.js');
                 const mine = (await app.repo.listClimbs('home-wall'))[0];
-                return JSON.stringify({ holds: mine.holds, grade: mine.grade, stars: mine.stars, comment: mine.comment });
+                return JSON.stringify({ holds: mine.holds, grade: mine.grade, comment: mine.comment });
             })()"""
         )
         original = you.eval(
             """(async () => {
                 const { app } = await import('/site/src/app.js');
                 const mine = (await app.repo.listClimbs('home-wall')).find((c) => c.name === 'Swoobap');
-                return JSON.stringify({ holds: mine.holds, grade: mine.grade, stars: mine.stars, comment: mine.comment });
+                return JSON.stringify({ holds: mine.holds, grade: mine.grade, comment: mine.comment });
             })()"""
         )
-        check(same == original, "the friend's copy has exactly the same holds, grade, stars and comment")
+        check(same == original, "the friend's copy has exactly the same holds, grade and comment")
 
         print("Opening the same link again")
         friend.go(local_link)

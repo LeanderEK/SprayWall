@@ -1,15 +1,15 @@
-import { SyncError, fromFields, toFields } from '../domain/sync.js';
+import { SyncError, fromFields, idFromName, toFields } from '../domain/sync.js';
 
 // The board's database, spoken to over plain web requests (Google's "REST" interface), so the app needs no library.
 // Firebase is Google's free service for this. Two things are used:
 //   - sign-in without a name or password ("anonymous"): it gives this phone a token the database asks for;
 //   - Firestore, the database: boards/<code> holds the board, boards/<code>/climbs/<id> holds one climb each.
-// Who may do what is decided by the rules in firebase/firestore.rules, which are pasted into the Firebase console.
+// Who may do what is decided by the rules in firebase/firestore.rules, which are pasted into the Firebase console:
+// anyone with a board's code may read its climbs and add new ones, and nobody may change or delete one.
 
 const SIGN_UP = 'https://identitytoolkit.googleapis.com/v1/accounts:signUp';
 const REFRESH = 'https://securetoken.googleapis.com/v1/token';
 const PAGE = 300; // climbs asked for at a time
-const BATCH = 100; // climbs sent at a time
 
 export class FirestoreRemote {
   /**
@@ -124,24 +124,34 @@ export class FirestoreRemote {
 
   // ---- the climbs ----
 
-  /** Sends climbs (the plain records from toRecord). The database stamps each with its own clock as `serverTime`. */
-  async sendClimbs(code, records) {
+  /**
+   * Adds a climb to the board (the plain record from toRecord). The database stamps it with its own clock as `serverTime`.
+   * It can only be added, never replaced: a climb with this id that is already there gives SyncError('exists').
+   */
+  async createClimb(code, id, record) {
     const project = encodeURIComponent(this.config.projectId);
-    for (let start = 0; start < records.length; start += BATCH) {
-      const writes = records.slice(start, start + BATCH).map((record) => ({
-        update: {
-          name: `projects/${project}/databases/(default)/documents/boards/${code}/climbs/${record.id}`,
-          fields: toFields(record),
-        },
-        updateTransforms: [{ fieldPath: 'serverTime', setToServerValue: 'REQUEST_TIME' }],
-      }));
-      await this.#call(`${this.#documents}:commit`, { json: { writes } });
+    const write = {
+      update: { name: `projects/${project}/databases/(default)/documents/boards/${code}/climbs/${id}`, fields: toFields(record) },
+      updateTransforms: [{ fieldPath: 'serverTime', setToServerValue: 'REQUEST_TIME' }],
+      currentDocument: { exists: false },
+    };
+    await this.#call(`${this.#documents}:commit`, { json: { writes: [write] } });
+  }
+
+  /** Whether the board has a climb with this id. */
+  async hasClimb(code, id) {
+    try {
+      await this.#call(`${this.#documents}/boards/${encodeURIComponent(code)}/climbs/${encodeURIComponent(id)}`, { method: 'GET' });
+      return true;
+    } catch (error) {
+      if (error.kind === 'notfound') return false;
+      throw error;
     }
   }
 
   /**
    * Climbs stamped after `since` (everything if it is null), oldest first, at most one page. `inclusive` includes the
-   * stamp itself, to carry on after a full page. Each record has `serverTime`, to be remembered as the new `since`.
+   * stamp itself, to carry on after a full page. Each record has its `id` and `serverTime`; remember the last stamp as the new `since`.
    */
   async fetchClimbs(code, since, { inclusive = false } = {}) {
     const query = {
@@ -151,7 +161,9 @@ export class FirestoreRemote {
     };
     if (since) query.where = { fieldFilter: { field: { fieldPath: 'serverTime' }, op: inclusive ? 'GREATER_THAN_OR_EQUAL' : 'GREATER_THAN', value: { timestampValue: since } } };
     const answer = await this.#call(`${this.#documents}/boards/${encodeURIComponent(code)}:runQuery`, { json: { structuredQuery: query } });
-    const records = (Array.isArray(answer) ? answer : []).filter((item) => item && item.document).map((item) => fromFields(item.document.fields));
+    const records = (Array.isArray(answer) ? answer : [])
+      .filter((item) => item && item.document)
+      .map((item) => ({ id: idFromName(item.document.name), ...fromFields(item.document.fields) }));
     return { records, full: records.length >= PAGE };
   }
 }

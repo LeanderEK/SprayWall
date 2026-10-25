@@ -3,9 +3,10 @@ rules_version = '2';
 // The rules of SprayWall's shared database. Paste all of this into Firebase console -> Firestore Database -> Rules -> Publish.
 //
 // The database holds boards. A board is found only by its code (16 random letters and digits, so nobody can guess one),
-// and boards cannot be listed. Whoever knows a board's code may read the board's climbs and add or change them.
-// Nothing can be deleted: a deleted climb is kept as a small marker, so that a phone that was offline cannot bring it back.
-// Every climb is checked for the right fields, types and sizes, and its `serverTime` has to be the database's own clock.
+// and boards cannot be listed. Whoever knows a board's code may read its climbs and ADD new ones.
+// Nobody can change or delete a climb once it is there (there is no update or delete rule at all), and nobody can
+// change or delete a board. Every climb is checked for the right fields, types and sizes, and its `serverTime` has
+// to be the database's own clock. The climb's id is the name of its document.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -14,20 +15,17 @@ service cloud.firestore {
     }
 
     function validClimb(d, id) {
-      return d.keys().hasOnly(['id', 'name', 'grade', 'stars', 'comment', 'author', 'holds', 'createdAt', 'updatedAt', 'deletedAt', 'serverTime'])
-        && d.keys().hasAll(['id', 'name', 'updatedAt', 'serverTime'])
-        && d.id == id
-        && d.id.matches('[A-Za-z0-9_-]{8,64}')
-        && d.name is string && d.name.size() <= 80
-        && d.updatedAt is int
+      return d.keys().hasOnly(['name', 'grade', 'comment', 'author', 'holds', 'createdAt', 'serverTime'])
+        && d.keys().hasAll(['name', 'author', 'holds', 'createdAt', 'serverTime'])
+        && id.matches('[A-Za-z0-9_-]{8,64}')
+        && d.name is string && d.name.size() >= 1 && d.name.size() <= 80
+        && d.author is string && d.author.size() >= 2 && d.author.size() <= 40
+        && d.holds is string && d.holds.size() <= 20000
+        && d.holds.matches('[0-9]+:(start|hand|foot|finish)(,[0-9]+:(start|hand|foot|finish))*')
+        && d.createdAt is int
         && d.serverTime == request.time
         && d.get('grade', 0) is int && d.get('grade', 0) >= 0 && d.get('grade', 0) <= 17
-        && d.get('stars', 0) is int && d.get('stars', 0) >= 0 && d.get('stars', 0) <= 5
-        && d.get('comment', '') is string && d.get('comment', '').size() <= 2000
-        && d.get('author', '') is string && d.get('author', '').size() <= 40
-        && d.get('holds', '') is string && d.get('holds', '').size() <= 20000
-        && d.get('createdAt', 0) is int
-        && d.get('deletedAt', 0) is int;
+        && d.get('comment', '') is string && d.get('comment', '').size() <= 2000;
     }
 
     match /boards/{board} {
@@ -41,7 +39,7 @@ service cloud.firestore {
 
       match /climbs/{climb} {
         allow get, list: if signedIn();
-        allow create, update: if signedIn() && validClimb(request.resource.data, climb);
+        allow create: if signedIn() && validClimb(request.resource.data, climb);
       }
     }
   }

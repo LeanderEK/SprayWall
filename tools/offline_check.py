@@ -34,6 +34,7 @@ def part_one():
     try:
         base = "http://localhost:8092"
         browser.go(f"{base}/site/")
+        browser.choose_username()
         browser.eval("window.__loadedOnce = true")
         saved = browser.wait_for(
             """(async () => {
@@ -128,6 +129,7 @@ def part_two():
     try:
         base = "http://localhost:8093"
         browser.go(f"{base}/site/")
+        browser.choose_username()
         first = browser.wait_for(
             "(async () => { const k = await caches.keys(); return k.length ? k[0] : ''; })()", seconds=25, what="the first version to be saved"
         )

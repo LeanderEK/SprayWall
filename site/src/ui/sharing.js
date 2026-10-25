@@ -1,6 +1,6 @@
 import { app } from '../app.js';
 import { makeShare, packShare, parseShare, linkFor, shareToText, ShareError, unpackShare } from '../domain/share.js';
-import { copyText, filePickerButton, h, isIos, isStandalone, openSheet, shareFile, shareLink, toast } from './dom.js';
+import { copyText, filePickerButton, h, isIos, isStandalone, openSheet, promptDialog, shareFile, shareLink, toast } from './dom.js';
 import { openSyncSheet, syncStatusText } from './syncsheet.js';
 
 // Everything about getting climbs to and from other people: files, links, pasted links, and a backup of everything.
@@ -80,8 +80,18 @@ export async function openSharingSheet() {
   const name = await app.repo.authorName();
   const setup = wall && app.sync?.available ? await app.repo.getSyncSetup(wall.key) : null;
   const syncLine = setup ? `Synced with a board. ${syncStatusText(app.sync.stateOf(wall.key), setup)}` : '';
-  const nameInput = h('input', { class: 'field', type: 'text', maxlength: 40, value: name, placeholder: 'Your name', 'aria-label': 'Your name', autocomplete: 'off' });
-  nameInput.addEventListener('change', () => app.repo.setMeta('author', nameInput.value.trim().slice(0, 40)));
+  const canChange = await app.repo.canChangeUsername();
+  const changeName = async () => {
+    const next = await promptDialog({ title: 'Change username', label: 'Username', value: name, confirmLabel: 'Save', maxLength: 20 });
+    if (next === null) return;
+    try {
+      await app.repo.setUsername(next);
+      sheet.close();
+      toast('Username changed.');
+    } catch (error) {
+      toast(error.message);
+    }
+  };
   const pasteBox = h('textarea', { class: 'field', rows: 2, placeholder: 'Paste a SprayWall link here', 'aria-label': 'Pasted link' });
   let sheet;
   const openPasted = () => {
@@ -93,7 +103,8 @@ export async function openSharingSheet() {
   const content = h(
     'div',
     { class: 'sheet-body' },
-    h('label', { class: 'field-label' }, 'Your name, shown on climbs you set', nameInput),
+    h('div', { class: 'row-between' }, h('div', {}, h('div', { class: 'detail-label' }, 'Your username'), h('div', { class: 'username' }, name)), canChange ? h('button', { type: 'button', class: 'text-btn', onclick: changeName }, 'Change') : h('span', { class: 'tag' }, 'Locked')),
+    canChange ? null : h('p', { class: 'note' }, 'You have uploaded climbs under this username, so it can no longer be changed.'),
     h('h3', {}, 'Import climbs'),
     h('div', { class: 'row-buttons' }, filePickerButton('From a file', { accept: '.json,application/json,.spraywall', multiple: true, onFiles: (files) => { sheet.close(); importFiles(files); } })),
     h('label', { class: 'field-label' }, 'Or paste a link', pasteBox),

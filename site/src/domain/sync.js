@@ -1,13 +1,18 @@
-import { cleanClimb, cleanDeleted } from './share.js';
+import { cleanClimb } from './share.js';
 
 // The rules of syncing, with no network in them (the network part is data/firestore.js, the steps are data/sync.js).
 //
-// A "board" is a shared set of climbs for one wall. Everyone who has the board's code can read and change it, so the
-// code is the password: 16 letters and digits chosen at random, written like  k7f2-9xqm-c4ta-p8dn.
-// Climbs are stored one document each, under the board, in the same fields as a shared climb. A climb that was deleted
-// stays as a small record with a `deletedAt`, so that a phone that was offline cannot bring it back by mistake.
+// A "board" is a shared set of climbs for one wall. Everyone who has the board's code can read the climbs on it and upload
+// climbs of their own, so the code is the password: 16 letters and digits chosen at random, written like  k7f2-9xqm-c4ta-p8dn.
+// An uploaded climb can never be changed or deleted (the database's rules allow only adding), so a board is just a growing
+// list and syncing is only "fetch the climbs I do not have yet". Climbs are stored one document each, under the board,
+// with the climb's id as the document's name. Star ratings are not stored there: each phone keeps its own.
 
-/** Why a sync step failed. `kind` is one of: offline, denied, notfound, quota, server, setup, code, wall, exists. */
+/**
+ * Why a sync step failed. `kind` is one of: offline, denied, notfound, quota, server, setup (the Firebase project is not
+ * ready), code (not a board code), wall (the board is for another wall), exists, mine (not a climb you can upload),
+ * board (no board for the wall yet), username (none chosen yet).
+ */
 export class SyncError extends Error {
   constructor(kind, message) {
     super(message);
@@ -52,21 +57,18 @@ export function parseBoardCode(text) {
 
 // ---- how a climb is written in the database ----
 
-const FIELDS = ['id', 'name', 'grade', 'stars', 'comment', 'author', 'holds', 'createdAt', 'updatedAt', 'deletedAt', 'serverTime'];
+// The fields of a climb on the board. The id is the document's name, not a field.
+const FIELDS = ['name', 'grade', 'comment', 'author', 'holds', 'createdAt', 'serverTime'];
 
-/** What goes into the database for a climb (or a deleted climb), as plain values. */
+/** What goes into the database for a climb, as plain values. */
 export function toRecord(climb) {
-  if (climb.deletedAt) return { id: climb.id, name: climb.name, deletedAt: climb.deletedAt, updatedAt: climb.updatedAt };
   return {
-    id: climb.id,
     name: climb.name,
     grade: climb.grade ?? null,
-    stars: climb.stars,
     comment: climb.comment || '',
-    author: climb.author || '',
+    author: climb.author,
     holds: climb.holds,
     createdAt: climb.createdAt,
-    updatedAt: climb.updatedAt,
   };
 }
 
@@ -74,7 +76,7 @@ export function toRecord(climb) {
 export function toFields(record) {
   const fields = {};
   for (const [key, value] of Object.entries(record)) {
-    if (value === null || value === undefined) continue;
+    if (value === null || value === undefined || value === '') continue;
     if (typeof value === 'string') fields[key] = { stringValue: value };
     else if (Number.isInteger(value)) fields[key] = { integerValue: String(value) };
     else throw new Error(`cannot store ${key}`);
@@ -91,15 +93,18 @@ export function fromFields(fields) {
     if (typeof typed.stringValue === 'string') record[key] = typed.stringValue;
     else if (typeof typed.timestampValue === 'string') record[key] = typed.timestampValue;
     else if (typed.integerValue !== undefined) record[key] = Number(typed.integerValue);
-    else if (typeof typed.doubleValue === 'number') record[key] = typed.doubleValue;
   }
   return record;
 }
 
-/** Checks and cleans one climb that came from the database (anyone with the code can write there). Null if unusable. */
-export function cleanRemote(record, now = Date.now()) {
-  const clean = record && record.deletedAt ? cleanDeleted(record, now) : cleanClimb(record, now);
-  return clean && { ...clean, serverTime: typeof record.serverTime === 'string' ? record.serverTime : null };
+/** The id of a climb from the name of its document ("projects/.../climbs/<id>"). */
+export const idFromName = (name) => String(name || '').split('/').pop();
+
+/** Checks and cleans one climb that came from the board (anyone with the code can write there). Null if unusable. */
+export function cleanRemote(id, record, now = Date.now()) {
+  const clean = cleanClimb({ ...record, id, updatedAt: record.createdAt }, now);
+  if (!clean || clean.author === '') return null; // a climb on a board always has someone's name on it
+  return { ...clean, serverTime: typeof record.serverTime === 'string' ? record.serverTime : null };
 }
 
 /**
@@ -112,30 +117,3 @@ export function stampValue(stamp) {
   const seconds = Math.floor(Date.parse(`${parts[1]}Z`) / 1000);
   return seconds * 1_000_000 + Number((parts[2] || '').padEnd(6, '0').slice(0, 6));
 }
-
-/** The "version" of a stored climb: when it last changed, or was deleted. */
-export const versionOf = (climb) => climb.deletedAt || climb.updatedAt;
-
-/**
- * What to do with a climb from the board, given your copy of it (or undefined):
- *   add / update  take the board's copy
- *   delete        it was deleted on the board after your last change, so delete yours
- *   remember      you do not have it, and it is deleted: keep a marker so an old copy cannot return
- *   same          nothing to do (your copy is the board's)
- *   keep          yours is newer, so it stays (and is sent to the board)
- */
-export function decideRemote(mine, remote) {
-  if (remote.deletedAt) {
-    if (!mine) return 'remember';
-    if (mine.deletedAt) return 'same';
-    return remote.deletedAt > mine.updatedAt ? 'delete' : 'keep';
-  }
-  if (!mine) return 'add';
-  if (mine.deletedAt) return remote.updatedAt > mine.deletedAt ? 'add' : 'keep';
-  if (remote.updatedAt > mine.updatedAt) return 'update';
-  if (remote.updatedAt === mine.updatedAt) return 'same';
-  return 'keep';
-}
-
-/** Marks a climb as "this version is on the board `code`". */
-export const syncMark = (code, climb) => `${code}:${versionOf(climb)}`;

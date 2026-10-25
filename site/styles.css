@@ -190,8 +190,21 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 8px 0; }
 /* the small strip above a climb: name on the left, grade on the right */
 .bar-count { font-size: 14px; color: var(--muted); padding-left: 4px; }
 .caption { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 16px 8px; background: var(--surface); flex: none; }
-.caption-name { font-size: 15px; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.caption-name { font-size: 15px; font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .caption-grade { flex: none; font-size: 13px; font-weight: 600; padding: 1px 10px; border-radius: 10px; background: var(--surface4); }
+
+/* upload button and tags in the strip above a climb, and in the info panel */
+.caption-upload { flex: none; display: flex; align-items: center; }
+.caption-upload:empty { display: none; }
+.pill-btn { border: 1px solid var(--outline); background: transparent; color: var(--text); font-size: 13px; font-weight: 600; padding: 1px 12px; border-radius: 10px; }
+.pill-btn:active { background: var(--surface4); }
+.tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 8px; background: var(--surface4); color: var(--muted); }
+.tag.draft { color: var(--text); }
+.row-author .badge { margin-left: 6px; padding: 0 6px; }
+.detail-by { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+.detail-rate { margin-top: 12px; }
+.detail-label { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+.username { font-size: 18px; font-weight: 600; }
 
 /* the sync sheet */
 .board-code-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
@@ -202,7 +215,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 8px 0; }
 /* what the info button shows */
 .detail-head { display: flex; align-items: center; gap: 14px; }
 .detail-grade { font-size: 34px; line-height: 1.1; }
-.detail-author { color: var(--muted); font-size: 14px; margin-top: 4px; }
+
 .detail-comment { margin-top: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .detail-comment.none { color: var(--muted); }
 

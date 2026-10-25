@@ -3,11 +3,13 @@ import { IdbStore, askToKeepData } from './data/db.js';
 import { FirestoreRemote } from './data/firestore.js';
 import { Repo } from './data/repo.js';
 import { SyncService } from './data/sync.js';
+import { cleanUsername } from './domain/climbs.js';
 import { FIREBASE } from './sync-config.js';
 import { h, toast } from './ui/dom.js';
 import { mountEditor } from './ui/editor.js';
 import { mountImporter } from './ui/importer.js';
 import { mountList } from './ui/list.js';
+import { askForUsername } from './ui/username.js';
 import { mountViewer } from './ui/viewer.js';
 import { mountWalls } from './ui/walls.js';
 
@@ -136,6 +138,11 @@ async function start() {
     return;
   }
   askToKeepData();
+  await app.repo.upgradeData();
+  // Everyone has a username. Climbs from before there were usernames (no name on them) are the owner's, so they take it.
+  const username = cleanUsername(await app.repo.authorName());
+  if (username) await app.repo.setUsername(username);
+  else await askForUsername((name) => app.repo.setUsername(name));
   startSync();
   depth = history.state?.depth ?? 0;
   if (history.state === null) history.replaceState({ depth: 0 }, '', location.href);

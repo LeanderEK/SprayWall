@@ -1,11 +1,13 @@
-import { MAX_GRADE, MAX_STARS } from './climbs.js';
+import { MAX_GRADE } from './climbs.js';
 import { formatMarks, parseMarks } from './holds.js';
 
 // Sharing climbs. Climbs travel as a small piece of JSON, either in a file or packed into a link.
 //
 //   { "format": "spraywall-climbs", "version": 1,
 //     "wall": { "key": "home-wall", "name": "Home wall" },
-//     "climbs": [ { "id", "name", "grade", "stars", "comment", "author", "holds", "createdAt", "updatedAt" } ] }
+//     "climbs": [ { "id", "name", "grade", "comment", "author", "holds", "createdAt", "updatedAt" } ] }
+//
+// A star rating is not shared: each person rates climbs on their own phone. (Files made before that still say "stars"; it is ignored.)
 //
 // Everything that arrives this way came from someone else, so it is checked and cleaned before the app looks at it:
 // text is trimmed and capped, numbers are forced into range, and a climb without a usable id or holds is skipped.
@@ -36,7 +38,6 @@ export const toWire = (climb) => ({
   id: climb.id,
   name: climb.name,
   grade: climb.grade ?? null,
-  stars: climb.stars,
   comment: climb.comment || '',
   author: climb.author || '',
   holds: climb.holds,
@@ -109,7 +110,6 @@ export function cleanClimb(raw, now) {
   const name = cleanText(raw.name, MAX_NAME);
   if (name === '') return null;
   const grade = wholeNumber(raw.grade) && raw.grade >= 0 && raw.grade <= MAX_GRADE ? raw.grade : null;
-  const stars = wholeNumber(raw.stars) && raw.stars >= 0 && raw.stars <= MAX_STARS ? raw.stars : 0;
   // A climb dated in the far future would beat every later edit, so dates are held to "now" at the latest.
   const latest = now + 24 * 60 * 60 * 1000;
   const date = (value, fallback) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.min(value, latest) : fallback);
@@ -119,7 +119,6 @@ export function cleanClimb(raw, now) {
     id: raw.id,
     name,
     grade,
-    stars,
     comment: cleanText(raw.comment, MAX_COMMENT),
     author: cleanText(raw.author, MAX_AUTHOR),
     holds: formatMarks(marks),

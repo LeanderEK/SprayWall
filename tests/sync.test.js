@@ -3,15 +3,16 @@ import { FakeFirebase } from './fakefirebase.js';
 import { FirestoreRemote } from '../site/src/data/firestore.js';
 import { MemoryStore, Repo } from '../site/src/data/repo.js';
 import { SyncService } from '../site/src/data/sync.js';
+import { cleanUsername, isMine, isUploaded } from '../site/src/domain/climbs.js';
 import {
-  BOARD_ALPHABET, SyncError, cleanRemote, decideRemote, fromFields, makeBoardCode, parseBoardCode, showBoardCode, stampValue, toFields, toRecord,
+  BOARD_ALPHABET, cleanRemote, fromFields, idFromName, makeBoardCode, parseBoardCode, showBoardCode, stampValue, toFields, toRecord,
 } from '../site/src/domain/sync.js';
 import { parseShare } from '../site/src/domain/share.js';
 
 const NOW = 1_800_000_000_000;
 const DAY = 24 * 60 * 60 * 1000;
 const WALL = { key: 'home-wall', name: 'Home wall', image: null, imageWidth: 10, imageHeight: 10, holds: [], angle: null };
-const climbData = (over = {}) => ({ wallKey: 'home-wall', name: 'One', grade: 4, stars: 3, comment: '', holds: '1:start,5:hand', ...over });
+const climbData = (over = {}) => ({ wallKey: 'home-wall', name: 'One', grade: 4, comment: '', holds: '1:start,5:hand', ...over });
 const kindOf = async (promise) => {
   try {
     await promise;
@@ -20,8 +21,16 @@ const kindOf = async (promise) => {
     return error.kind || `not a SyncError: ${error.message}`;
   }
 };
+const messageOf = async (promise) => {
+  try {
+    await promise;
+    return 'no error';
+  } catch (error) {
+    return error.message;
+  }
+};
 
-// ---- board codes ----
+// ---- board codes and usernames ----
 
 test('sync: a board code is 16 letters and digits that cannot be mixed up, written in four groups', () => {
   const code = makeBoardCode();
@@ -48,19 +57,29 @@ test('sync: a typed or pasted code is understood in any case, with spaces or das
   }
 });
 
+test('username: 2 to 20 letters, digits, spaces, dots, dashes or underscores, tidied; anything else is refused', () => {
+  assert.eq(cleanUsername('Leander'), 'Leander');
+  assert.eq(cleanUsername('  Zeke   B  '), 'Zeke B');
+  assert.eq(cleanUsername('Åsa-2_x.y'), 'Åsa-2_x.y');
+  assert.eq(cleanUsername('ab'), 'ab');
+  for (const bad of ['', ' ', 'a', ' a ', 'x'.repeat(21), '<b>hi</b>', '-leading', '🙂🙂', 'semi;colon', null, undefined]) assert.eq(cleanUsername(bad), null, String(bad));
+  assert.ok(isMine({ author: 'zeke' }, ' Zeke '), 'capitals and spaces at the ends do not matter');
+  assert.ok(!isMine({ author: '' }, ''), 'no name is nobody\'s');
+});
+
 // ---- how climbs are written to and read from the database ----
 
 test('sync: a climb survives being written as database fields and read back; only the climb fields are taken', () => {
-  const climb = { id: 'abc-12345678', wallKey: 'home-wall', name: 'Swoobap', grade: 6, stars: 5, comment: 'hi', author: 'Zeke', holds: '1:hand', createdAt: 1792774888771, updatedAt: 1792774913178, syncMark: 'x:1' };
+  const climb = { id: 'abc-12345678', wallKey: 'home-wall', name: 'Swoobap', grade: 6, comment: 'hi', author: 'Zeke', holds: '1:hand', createdAt: 1792774888771, updatedAt: 1792774913178, publishedAt: 5 };
   const record = toRecord(climb);
-  assert.eq(Object.keys(record), ['id', 'name', 'grade', 'stars', 'comment', 'author', 'holds', 'createdAt', 'updatedAt']);
+  assert.eq(Object.keys(record), ['name', 'grade', 'comment', 'author', 'holds', 'createdAt'], 'no id, rating, stars or edit time goes up');
   const fields = toFields(record);
   assert.eq(fields.createdAt, { integerValue: '1792774888771' });
   assert.eq(fields.name, { stringValue: 'Swoobap' });
   assert.eq(fromFields(fields), record);
-  assert.ok(!('grade' in toFields(toRecord({ ...climb, grade: null }))), 'no grade is no field');
-  const gone = toRecord({ id: 'abc-12345678', wallKey: 'home-wall', name: 'Swoobap', deletedAt: 5000, updatedAt: 5000 });
-  assert.eq(gone, { id: 'abc-12345678', name: 'Swoobap', deletedAt: 5000, updatedAt: 5000 });
+  const bare = toFields(toRecord({ ...climb, grade: null, comment: '' }));
+  assert.ok(!('grade' in bare) && !('comment' in bare), 'no grade and no comment are no fields');
+  assert.eq(idFromName('projects/p/databases/(default)/documents/boards/abcdefghjkmnpqrs/climbs/abc-12345678'), 'abc-12345678');
   const sneaky = fromFields(JSON.parse('{"__proto__":{"stringValue":"x"},"constructor":{"stringValue":"y"},"evil":{"stringValue":"z"},"name":{"stringValue":"ok"},"serverTime":{"timestampValue":"2026-10-25T10:00:00.123456Z"}}'));
   assert.eq(sneaky, { name: 'ok', serverTime: '2026-10-25T10:00:00.123456Z' });
   assert.ok(Object.getPrototypeOf(sneaky) === Object.prototype, 'nothing slips in through the prototype');
@@ -76,85 +95,130 @@ test('sync: time stamps with any number of decimals compare exactly', () => {
 });
 
 test('sync: whatever is on the board is checked and cleaned before the app uses it', () => {
-  const record = { id: 'abc-12345678', name: '<b>x</b>'.repeat(40), grade: 99, stars: 17, comment: 'c'.repeat(5000), author: 'a'.repeat(300), holds: '3:hand,9:wobble', createdAt: NOW * 9, updatedAt: NOW * 9, serverTime: '2026-10-25T10:00:00.1Z' };
-  const clean = cleanRemote(record, NOW);
-  assert.eq([clean.name.length, clean.grade, clean.stars, clean.comment.length, clean.author.length, clean.holds], [80, null, 0, 2000, 40, '3:hand']);
-  assert.ok(clean.updatedAt <= NOW + DAY, 'a date from the future is held to tomorrow at the latest');
+  const record = { name: '<b>x</b>'.repeat(40), grade: 99, comment: 'c'.repeat(5000), author: 'a'.repeat(300), holds: '3:hand,9:wobble', createdAt: NOW * 9, serverTime: '2026-10-25T10:00:00.1Z', stars: 5, evil: 1 };
+  const clean = cleanRemote('abc-12345678', record, NOW);
+  assert.eq([clean.name.length, clean.grade, clean.comment.length, clean.author.length, clean.holds], [80, null, 2000, 40, '3:hand']);
+  assert.ok(clean.createdAt <= NOW + DAY && clean.updatedAt === clean.createdAt, 'a date from the future is held to tomorrow at the latest');
+  assert.ok(!('stars' in clean) && !('evil' in clean));
   assert.eq(clean.serverTime, '2026-10-25T10:00:00.1Z');
-  assert.eq(cleanRemote({ ...record, holds: 'junk' }, NOW), null);
-  assert.eq(cleanRemote({ ...record, id: 'x' }, NOW), null);
-  assert.eq(cleanRemote(null, NOW), null);
-  const gone = cleanRemote({ id: 'abc-12345678', name: '', deletedAt: NOW * 9, updatedAt: 1, holds: 'ignored', serverTime: 's' }, NOW);
-  assert.eq(gone, { id: 'abc-12345678', name: 'Deleted climb', deletedAt: NOW + DAY, updatedAt: NOW + DAY, serverTime: 's' });
+  assert.eq(cleanRemote('abc-12345678', { ...record, holds: 'junk' }, NOW), null);
+  assert.eq(cleanRemote('abc-12345678', { ...record, author: '' }, NOW), null, 'a climb on a board always has a name on it');
+  assert.eq(cleanRemote('x', record, NOW), null);
+  assert.eq(cleanRemote('abc-12345678', {}, NOW), null);
 });
 
-test('sync: what to do with a climb from the board, for every pairing', () => {
-  const live = (updatedAt) => ({ id: 'abc-12345678', name: 'n', updatedAt });
-  const dead = (deletedAt) => ({ id: 'abc-12345678', name: 'n', deletedAt, updatedAt: deletedAt });
-  assert.eq(decideRemote(undefined, live(5)), 'add');
-  assert.eq(decideRemote(undefined, dead(5)), 'remember');
-  assert.eq(decideRemote(live(5), live(9)), 'update');
-  assert.eq(decideRemote(live(5), live(5)), 'same');
-  assert.eq(decideRemote(live(9), live(5)), 'keep');
-  assert.eq(decideRemote(live(5), dead(9)), 'delete');
-  assert.eq(decideRemote(live(9), dead(5)), 'keep', 'an edit after the deletion wins');
-  assert.eq(decideRemote(dead(5), live(9)), 'add', 'an edit after the deletion brings it back');
-  assert.eq(decideRemote(dead(9), live(5)), 'keep', 'a deletion after the edit stays deleted');
-  assert.eq(decideRemote(dead(5), dead(9)), 'same');
-});
+// ---- the repo's side: drafts, uploaded climbs, ratings, username ----
 
-// ---- the repo's side of syncing ----
-
-const freshRepo = async (clock = { now: NOW }) => {
+const freshRepo = async (clock = { now: NOW }, username = 'Leander') => {
   const repo = new Repo(new MemoryStore(), () => clock.now);
   await repo.saveWall(WALL);
+  if (username) await repo.setUsername(username);
   return { repo, clock };
 };
 
-test('sync: a climb needs sending until its current version is marked sent, and any change makes it need sending again', async () => {
+test('climbs: a new climb is a draft with your username on it; once uploaded it can never be changed or deleted', async () => {
   const { repo, clock } = await freshRepo();
-  const first = await repo.saveClimb(climbData());
-  assert.eq((await repo.climbsToSend('home-wall', 'boardone')).map((c) => c.id), [first.id]);
-  await repo.markSent('boardone', [first]);
-  assert.eq((await repo.climbsToSend('home-wall', 'boardone')).length, 0);
-  assert.eq((await repo.climbsToSend('home-wall', 'boardtwo')).length, 1, 'another board does not have it');
+  const draft = await repo.saveClimb(climbData({ name: 'Draft' }));
+  assert.eq([draft.author, isUploaded(draft), 'stars' in draft], ['Leander', false, false]);
   clock.now += 1000;
-  const edited = await repo.saveClimb(climbData({ id: first.id, name: 'Changed' }));
-  assert.eq((await repo.climbsToSend('home-wall', 'boardone')).length, 1);
-  await repo.markSent('boardone', [first]); // the old version arriving late must not hide the edit
-  assert.eq((await repo.climbsToSend('home-wall', 'boardone')).length, 1);
-  await repo.markSent('boardone', [edited]);
-  assert.eq((await repo.climbsToSend('home-wall', 'boardone')).length, 0);
-  clock.now += 1000;
-  await repo.deleteClimb(first.id);
-  const [marker] = await repo.climbsToSend('home-wall', 'boardone');
-  assert.ok(marker.deletedAt, 'a deletion is sent too');
+  const edited = await repo.saveClimb(climbData({ id: draft.id, name: 'Draft edited' }));
+  assert.eq(edited.author, 'Leander');
+  const published = await repo.markPublished(draft.id);
+  assert.ok(isUploaded(published));
+  await assert.rejects(repo.saveClimb(climbData({ id: draft.id, name: 'Too late' })), 'cannot be changed');
+  await assert.rejects(repo.deleteClimb(draft.id), 'cannot be deleted');
+  assert.eq((await repo.getClimb(draft.id)).name, 'Draft edited');
+  const other = await repo.saveClimb(climbData({ name: 'Other draft' }));
+  await repo.deleteClimb(other.id);
+  assert.eq(await repo.getClimb(other.id), undefined, 'drafts can still be deleted');
+  const plan = await repo.planImport(parseShare({ format: 'spraywall-climbs', version: 1, wall: { key: 'home-wall', name: 'Home wall' }, climbs: [{ id: draft.id, name: 'From a file', holds: '1:hand', createdAt: 5, updatedAt: clock.now + 10_000 }] }, clock.now));
+  assert.eq(plan.items[0].status, 'same', 'a file cannot replace an uploaded climb');
 });
 
-test('sync: taking in the board\'s climbs adds, updates and deletes, and leaves newer local edits alone', async () => {
-  const { repo, clock } = await freshRepo();
-  const mine = await repo.saveClimb(climbData({ name: 'Mine' }));
-  const doomed = await repo.saveClimb(climbData({ name: 'Doomed' }));
-  const newer = await repo.saveClimb(climbData({ name: 'Newer here' }));
-  const remote = (id, over) => ({ id, name: 'x', grade: 2, stars: 1, comment: '', author: '', holds: '2:hand', createdAt: 1, updatedAt: 1, serverTime: 's', ...over });
+test('ratings: each phone keeps its own, 1 to 5, and they never travel with a climb', async () => {
+  const { repo } = await freshRepo();
+  const climb = await repo.saveClimb(climbData());
+  assert.eq(await repo.getRating(climb.id), 0);
   let heard = 0;
   repo.onChange(() => heard++);
-  const counts = await repo.applySynced('home-wall', 'boardone', [
+  assert.eq(await repo.setRating(climb.id, 4), 4);
+  assert.eq(heard, 1, 'the screens are told');
+  assert.eq(await repo.getRating(climb.id), 4);
+  assert.eq([...(await repo.getRatings())], [[climb.id, 4]]);
+  assert.eq(await repo.setRating(climb.id, 99), 5, 'too many stars is held at 5');
+  assert.eq(await repo.setRating(climb.id, 0), 0);
+  assert.eq((await repo.getRatings()).size, 0, '0 takes the rating away');
+  await repo.setRating(climb.id, 3);
+  const share = await repo.exportWall('home-wall');
+  assert.ok(!JSON.stringify(share).includes('stars') && !JSON.stringify(share).includes('rating'), 'a shared file has no stars');
+  assert.ok(!('stars' in toRecord(await repo.getClimb(climb.id))));
+});
+
+test('ratings: the stars old climbs carried become your own ratings, once, and the field goes', async () => {
+  const { repo } = await freshRepo();
+  await repo.store.put('climbs', { id: 'old-climb-0001', wallKey: 'home-wall', name: 'Old', grade: 3, stars: 5, comment: '', author: '', holds: '1:hand', createdAt: 1, updatedAt: 1 }, 'old-climb-0001');
+  await repo.store.put('climbs', { id: 'old-climb-0002', wallKey: 'home-wall', name: 'Unrated', grade: 3, stars: 0, comment: '', author: '', holds: '1:hand', createdAt: 2, updatedAt: 2 }, 'old-climb-0002');
+  await repo.store.put('climbs', { id: 'old-climb-0003', wallKey: 'home-wall', name: 'Gone', deletedAt: 9, updatedAt: 9, stars: 4 }, 'old-climb-0003');
+  assert.eq(await repo.upgradeData(), 3);
+  assert.eq([...(await repo.getRatings())], [['old-climb-0001', 5]]);
+  assert.ok(!('stars' in (await repo.getClimb('old-climb-0001'))));
+  assert.eq(await repo.upgradeData(), 0, 'the second time there is nothing to do');
+});
+
+test('username: the first one is given to unnamed climbs; it can change until a climb of yours is uploaded', async () => {
+  const { repo } = await freshRepo(undefined, '');
+  await repo.store.put('climbs', { id: 'old-climb-0001', wallKey: 'home-wall', name: 'Old', grade: 3, comment: '', author: '', holds: '1:hand', createdAt: 1, updatedAt: 1 }, 'old-climb-0001');
+  await repo.store.put('climbs', { id: 'friends-climb1', wallKey: 'home-wall', name: 'Theirs', grade: 3, comment: '', author: 'Zeke', holds: '1:hand', createdAt: 1, updatedAt: 1 }, 'friends-climb1');
+  await assert.rejects(repo.setUsername('x'), '2 to 20');
+  assert.eq(await repo.setUsername('  Leander  '), 'Leander');
+  assert.eq((await repo.getClimb('old-climb-0001')).author, 'Leander', 'climbs from before usernames are the owner\'s');
+  assert.eq((await repo.getClimb('friends-climb1')).author, 'Zeke', 'someone else\'s name is left alone');
+  const mine = await repo.saveClimb(climbData());
+  assert.ok(await repo.canChangeUsername());
+  assert.eq(await repo.setUsername('Lee'), 'Lee');
+  assert.eq((await repo.getClimb(mine.id)).author, 'Lee', 'drafts follow a change of name');
+  await repo.markPublished(mine.id);
+  assert.ok(!(await repo.canChangeUsername()));
+  await assert.rejects(repo.setUsername('Somebody else'), 'cannot be changed');
+  assert.eq(await repo.setUsername('lee'), 'lee', 'only capitals differ, so it is the same name');
+});
+
+test('username: a climb from a file with nobody\'s name on it is taken to be the importer\'s; one with a name keeps it', async () => {
+  const { repo } = await freshRepo(undefined, 'Leander');
+  const file = parseShare({ format: 'spraywall-climbs', version: 1, wall: { key: 'home-wall', name: 'Home wall' }, climbs: [
+    { id: 'unnamed-climb-01', name: 'Unnamed', holds: '1:hand', createdAt: 5, updatedAt: 9 },
+    { id: 'named-climb-0001', name: 'Named', author: 'Zeke', holds: '1:hand', createdAt: 5, updatedAt: 9 },
+  ] }, NOW);
+  await repo.applyImport(await repo.planImport(file));
+  assert.eq((await repo.getClimb('unnamed-climb-01')).author, 'Leander');
+  assert.eq((await repo.getClimb('named-climb-0001')).author, 'Zeke');
+});
+
+test('board: taking in the board\'s climbs adds them, turns a matching draft into the board\'s version, and leaves uploaded ones alone', async () => {
+  const { repo, clock } = await freshRepo();
+  const draft = await repo.saveClimb(climbData({ name: 'My draft' }));
+  const gone = await repo.saveClimb(climbData({ name: 'Deleted here' }));
+  await repo.deleteClimb(gone.id);
+  const uploaded = await repo.markPublished((await repo.saveClimb(climbData({ name: 'Mine, uploaded' }))).id);
+  const remote = (id, over = {}) => ({ id, name: 'x', grade: 2, comment: '', author: 'Zeke', holds: '2:hand', createdAt: 1, updatedAt: 1, serverTime: 's', ...over });
+  let heard = 0;
+  repo.onChange(() => heard++);
+  clock.now += 1000;
+  const counts = await repo.applyPublished('home-wall', [
     remote('fresh-climb-01', { name: 'Fresh' }),
-    remote(mine.id, { name: 'Mine, edited elsewhere', updatedAt: mine.updatedAt + 5000 }),
-    { id: doomed.id, name: 'Doomed', deletedAt: doomed.updatedAt + 10, updatedAt: doomed.updatedAt + 10, serverTime: 's' },
-    remote(newer.id, { name: 'Older there', updatedAt: newer.updatedAt - 500 }),
-    { id: 'long-gone-0001', name: 'Gone', deletedAt: 77, updatedAt: 77, serverTime: 's' },
+    remote(draft.id, { name: 'My draft, as uploaded elsewhere', author: 'Leander' }),
+    remote(gone.id, { name: 'Back from the board' }),
+    remote(uploaded.id, { name: 'Different' }),
   ]);
-  assert.eq(counts, { added: 1, updated: 1, deleted: 1 });
+  assert.eq(counts, { added: 2, replaced: 1 });
   assert.eq(heard, 1, 'the screens are told once');
-  assert.eq((await repo.listClimbs('home-wall')).map((c) => c.name).sort(), ['Fresh', 'Mine, edited elsewhere', 'Newer here']);
-  assert.ok(!('serverTime' in (await repo.getClimb('fresh-climb-01'))), 'the stamp is not kept on the climb');
-  assert.eq((await repo.climbsToSend('home-wall', 'boardone')).map((c) => c.name), ['Newer here'], 'only the newer local edit still needs sending');
-  assert.eq(await repo.getClimb('long-gone-0001'), undefined);
-  clock.now += 1;
-  const again = await repo.applySynced('home-wall', 'boardone', [{ ...remote('long-gone-0001'), name: 'Old copy', updatedAt: 50 }]);
-  assert.eq(again, { added: 0, updated: 0, deleted: 0 }, 'an old copy cannot bring back a deleted climb');
+  const fresh = await repo.getClimb('fresh-climb-01');
+  assert.ok(isUploaded(fresh) && !('serverTime' in fresh), 'it is final here and the stamp is not kept');
+  assert.eq((await repo.getClimb(draft.id)).name, 'My draft, as uploaded elsewhere');
+  assert.ok(isUploaded(await repo.getClimb(draft.id)));
+  assert.eq((await repo.getClimb(uploaded.id)).name, 'Mine, uploaded', 'an uploaded climb is never overwritten');
+  assert.eq((await repo.getClimb(gone.id)).name, 'Back from the board', 'a climb on the board cannot be deleted by hiding it here');
+  assert.eq(await repo.applyPublished('home-wall', [remote('fresh-climb-01')]), { added: 0, replaced: 0 });
 });
 
 // ---- talking to the database ----
@@ -167,6 +231,7 @@ const memoryTokens = () => {
 const remoteFor = (backend, tokens = memoryTokens()) => new FirestoreRemote({ config: config(backend), tokens, fetchImpl: backend.fetch, now: () => backend.clock.now });
 const count = (backend, part) => backend.requests.filter((request) => request.includes(part)).length;
 const CODE = 'k7f29xqmc4tap8dn';
+const RECORD = { name: 'Swoobap', grade: 6, comment: 'hi', author: 'Zeke', holds: '1:hand,5:start', createdAt: NOW };
 
 test('firebase: signs in once, keeps the sign-in between visits, renews it when it runs out', async () => {
   const backend = new FakeFirebase();
@@ -195,8 +260,7 @@ test('firebase: problems come back as readable errors of a known kind', async ()
   assert.eq(await kindOf(remoteFor(backend).getBoard(CODE)), 'offline');
   backend.offline = false;
   backend.anonymousDisabled = true;
-  const disabled = remoteFor(backend);
-  assert.eq(await kindOf(disabled.getBoard(CODE)), 'setup');
+  assert.eq(await kindOf(remoteFor(backend).getBoard(CODE)), 'setup');
   await assert.rejects(remoteFor(backend).getBoard(CODE), 'Anonymous sign-in is not switched on');
   backend.anonymousDisabled = false;
   const wrongKey = new FirestoreRemote({ config: { apiKey: 'wrong', projectId: backend.projectId }, tokens: memoryTokens(), fetchImpl: backend.fetch, now: () => NOW });
@@ -208,16 +272,45 @@ test('firebase: problems come back as readable errors of a known kind', async ()
   await remote.createBoard(CODE, { wallKey: 'home-wall', wallName: 'Home wall' });
   assert.eq(await kindOf(remote.createBoard(CODE, { wallKey: 'home-wall', wallName: 'Home wall' })), 'exists');
   assert.eq(await remote.getBoard(CODE), { wallKey: 'home-wall', wallName: 'Home wall' });
-  assert.eq(await kindOf(remote.sendClimbs(CODE, [{ id: 'abc-12345678', name: 'x', stars: 9, updatedAt: 5 }])), 'denied', 'the rules refuse a climb with 9 stars');
-  assert.eq(await kindOf(remote.createBoard('short', { wallKey: 'a', wallName: 'b' })), 'denied', 'and a board without a proper code');
+  assert.eq(await kindOf(remote.createBoard('short', { wallKey: 'a', wallName: 'b' })), 'denied', 'a board without a proper code is refused');
 });
 
-// ---- two phones and one board ----
+test('firebase: a climb can be added once and never changed or deleted', async () => {
+  const backend = new FakeFirebase();
+  const remote = remoteFor(backend);
+  await remote.createBoard(CODE, { wallKey: 'home-wall', wallName: 'Home wall' });
+  assert.ok(!(await remote.hasClimb(CODE, 'abc-12345678')));
+  await remote.createClimb(CODE, 'abc-12345678', RECORD);
+  assert.ok(await remote.hasClimb(CODE, 'abc-12345678'));
+  assert.eq(await kindOf(remote.createClimb(CODE, 'abc-12345678', { ...RECORD, name: 'Changed' })), 'exists', 'adding it again does not replace it');
+  const { records } = await remote.fetchClimbs(CODE, null);
+  assert.eq([records.length, records[0].id, records[0].name, records[0].author], [1, 'abc-12345678', 'Swoobap', 'Zeke']);
+  assert.ok(typeof records[0].serverTime === 'string', 'the database stamps it');
 
-async function phone(backend) {
+  // What a hand-made request could try, against the same rules.
+  const call = async (method, path, body) => {
+    const token = (await (async () => { const r = await backend.fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${backend.apiKey}`, { method: 'POST', body: '{}' }); return (await r.json()).idToken; })());
+    const response = await backend.fetch(`https://firestore.googleapis.com/v1/projects/${backend.projectId}/databases/(default)/documents/${path}`, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    return response.status;
+  };
+  const doc = `boards/${CODE}/climbs/abc-12345678`;
+  assert.eq(await call('DELETE', doc), 403, 'delete is refused');
+  assert.eq(await call('PATCH', doc, { fields: { name: { stringValue: 'Hacked' } } }), 403, 'edit is refused');
+  const overwrite = { writes: [{ update: { name: `projects/${backend.projectId}/databases/(default)/documents/${doc}`, fields: toFields({ ...RECORD, name: 'Hacked' }) }, updateTransforms: [{ fieldPath: 'serverTime', setToServerValue: 'REQUEST_TIME' }] }] };
+  assert.eq(await call('POST', ':commit', overwrite), 403, 'a replacement is refused');
+  assert.eq(backend.docs.get(doc).fields.name.stringValue, 'Swoobap', 'and nothing changed');
+  for (const bad of [{ ...RECORD, author: 'Z' }, { ...RECORD, holds: 'nonsense' }, { ...RECORD, name: '' }, { ...RECORD, grade: 40 }, { ...RECORD, name: 'x'.repeat(81) }]) {
+    assert.eq(await kindOf(remote.createClimb(CODE, 'bad-climb-0001', bad)), 'denied', JSON.stringify(bad).slice(0, 60));
+  }
+});
+
+// ---- phones and a board ----
+
+async function phone(backend, username = 'Leander') {
   const clock = backend.clock;
   const repo = new Repo(new MemoryStore(), () => clock.now);
   await repo.saveWall(WALL);
+  if (username) await repo.setUsername(username);
   const tokens = { load: () => repo.getMeta('syncAuth'), save: (auth) => repo.setMetaQuietly('syncAuth', auth) };
   const remote = new FirestoreRemote({ config: config(backend), tokens, fetchImpl: backend.fetch, now: () => clock.now });
   const sync = new SyncService({ repo, remote, now: () => clock.now, delays: { first: 10, afterChange: 20, whileOpen: 100_000 } });
@@ -226,112 +319,97 @@ async function phone(backend) {
 const tick = (backend, seconds = 5) => { backend.clock.now += seconds * 1000; };
 const names = async (device) => (await device.repo.listClimbs('home-wall')).map((c) => c.name).sort();
 
-test('sync: a board started on one phone is joined by another, and climbs flow both ways, edits and deletions included', async () => {
+test('board: climbs are uploaded one at a time by their maker and then reach everyone on the board, final', async () => {
   const backend = new FakeFirebase();
-  const a = await phone(backend);
-  const b = await phone(backend);
-  const one = await a.repo.saveClimb(climbData({ name: 'One', grade: 6, stars: 5, comment: 'Directional.', holds: '1:start,5:hand,9:finish' }));
+  const a = await phone(backend, 'Alex');
+  const b = await phone(backend, 'Bea');
+  const one = await a.repo.saveClimb(climbData({ name: 'One', grade: 6, comment: 'Directional.', holds: '1:start,5:hand,9:finish' }));
   tick(backend);
   const two = await a.repo.saveClimb(climbData({ name: 'Two' }));
-  tick(backend);
+  const draft = await a.repo.saveClimb(climbData({ name: 'Still a draft' }));
   const code = await a.sync.createBoard('home-wall');
-  assert.eq(code.length, 16);
+  assert.eq((await a.repo.getSyncSetup('home-wall')).code, code);
   assert.eq(a.sync.stateOf('home-wall').status, 'ok');
-  assert.eq((await a.repo.climbsToSend('home-wall', code)).length, 0, 'everything was sent');
+  assert.ok(!isUploaded(await a.repo.getClimb(one.id)), 'making a board does not upload anything by itself');
+
+  await a.sync.upload(one.id);
+  tick(backend);
+  await a.sync.upload(two.id);
+  assert.ok(isUploaded(await a.repo.getClimb(one.id)) && isUploaded(await a.repo.getClimb(two.id)) && !isUploaded(await a.repo.getClimb(draft.id)));
+  await assert.rejects(a.repo.saveClimb(climbData({ id: one.id, name: 'Edit' })), 'cannot be changed');
+  await assert.rejects(a.repo.deleteClimb(two.id), 'cannot be deleted');
 
   tick(backend);
   await b.sync.joinBoard('home-wall', showBoardCode(code));
-  assert.eq(await names(b), ['One', 'Two']);
+  assert.eq(await names(b), ['One', 'Two'], 'the draft stayed on its maker\'s phone');
   const copy = await b.repo.getClimb(one.id);
-  assert.eq([copy.holds, copy.grade, copy.stars, copy.comment, copy.createdAt, copy.updatedAt], [one.holds, 6, 5, 'Directional.', one.createdAt, one.updatedAt]);
-  assert.eq((await b.repo.climbsToSend('home-wall', code)).length, 0, 'nothing is sent back');
+  assert.eq([copy.holds, copy.grade, copy.comment, copy.author, copy.createdAt], [one.holds, 6, 'Directional.', 'Alex', one.createdAt]);
+  assert.ok(isUploaded(copy) && !isMine(copy, 'Bea'));
+  await assert.rejects(b.repo.saveClimb(climbData({ id: one.id, name: 'Mine now' })), 'cannot be changed');
+  await assert.rejects(b.repo.deleteClimb(one.id), 'cannot be deleted');
+  assert.eq(await kindOf(b.sync.upload(one.id)), 'mine', 'a climb from the board is already uploaded');
+
+  await a.repo.setRating(one.id, 5);
+  assert.eq(await b.repo.getRating(one.id), 0, 'ratings stay on their own phone');
+  await b.repo.setRating(one.id, 2);
+  assert.eq(await a.repo.getRating(one.id), 5);
 
   tick(backend);
-  await b.repo.saveClimb(climbData({ name: 'Three' }));
+  const bea = await b.repo.saveClimb(climbData({ name: 'Bea\'s climb' }));
+  await b.sync.upload(bea.id);
+  tick(backend);
+  const arrived = await a.sync.syncWall('home-wall');
+  assert.eq(arrived.added, 1);
+  assert.eq((await a.repo.getClimb(bea.id)).author, 'Bea');
+  tick(backend);
+  await a.sync.upload(draft.id);
+  tick(backend);
   await b.sync.syncWall('home-wall');
-  tick(backend);
-  await a.sync.syncWall('home-wall');
-  assert.eq(await names(a), ['One', 'Three', 'Two']);
-
-  tick(backend);
-  await a.repo.saveClimb(climbData({ id: one.id, name: 'One!', grade: 7, stars: 5, comment: '', holds: one.holds }));
-  await a.sync.syncWall('home-wall');
-  tick(backend);
-  const result = await b.sync.syncWall('home-wall');
-  assert.eq((await b.repo.getClimb(one.id)).name, 'One!');
-  assert.eq(result.updated, 1);
-
-  tick(backend);
-  await b.repo.deleteClimb(two.id);
-  await b.sync.syncWall('home-wall');
-  tick(backend);
-  await a.sync.syncWall('home-wall');
-  assert.eq(await names(a), ['One!', 'Three']);
+  assert.eq(await names(b), ['Bea\'s climb', 'One', 'Still a draft', 'Two']);
+  assert.ok(!(await a.repo.canChangeUsername()), 'Alex has uploaded, so the name is final');
 });
 
-test('sync: edits made on two phones while offline are both kept, the later edit of the same climb wins', async () => {
+test('board: what is refused is explained, and a refused upload stays a draft', async () => {
   const backend = new FakeFirebase();
-  const a = await phone(backend);
-  const b = await phone(backend);
-  const shared = await a.repo.saveClimb(climbData({ name: 'Shared' }));
-  const code = await a.sync.createBoard('home-wall');
-  tick(backend);
-  await b.sync.joinBoard('home-wall', code);
-
+  const a = await phone(backend, 'Alex');
+  const draft = await a.repo.saveClimb(climbData({ name: 'Draft' }));
+  assert.eq(await kindOf(a.sync.upload(draft.id)), 'board', 'no board for this wall yet');
+  await a.sync.createBoard('home-wall');
+  const file = parseShare({ format: 'spraywall-climbs', version: 1, wall: { key: 'home-wall', name: 'Home wall' }, climbs: [{ id: 'from-a-file-01', name: 'Not mine', author: 'Zeke', holds: '1:hand', createdAt: 5, updatedAt: 9 }] }, NOW);
+  await a.repo.applyImport(await a.repo.planImport(file));
+  assert.eq(await kindOf(a.sync.upload('from-a-file-01')), 'mine', 'only your own climbs can be uploaded');
+  assert.eq(await kindOf(a.sync.upload('no-such-climb')), 'mine');
   backend.offline = true;
-  tick(backend);
-  await a.repo.saveClimb(climbData({ id: shared.id, name: 'A edit' }));
-  await a.repo.saveClimb(climbData({ name: 'A new' }));
-  tick(backend);
-  await b.repo.saveClimb(climbData({ id: shared.id, name: 'B edit' }));
-  assert.eq(await kindOf(a.sync.syncWall('home-wall')), 'offline');
-  assert.eq(a.sync.stateOf('home-wall').status, 'offline');
-  assert.eq(await kindOf(b.sync.syncWall('home-wall')), 'offline');
+  assert.eq(await kindOf(a.sync.upload(draft.id)), 'offline');
+  assert.ok(!isUploaded(await a.repo.getClimb(draft.id)), 'still a draft');
   backend.offline = false;
-
-  tick(backend);
-  await a.sync.syncWall('home-wall');
-  tick(backend);
-  await b.sync.syncWall('home-wall');
-  tick(backend);
-  await a.sync.syncWall('home-wall');
-  assert.eq(await names(a), ['A new', 'B edit']);
-  assert.eq(await names(b), ['A new', 'B edit']);
+  backend.quotaUsedUp = true;
+  assert.eq(await kindOf(a.sync.upload(draft.id)), 'quota');
+  assert.ok(a.sync.stateOf('home-wall').message.includes('daily limit'));
+  backend.quotaUsedUp = false;
+  await a.sync.upload(draft.id);
+  assert.ok(isUploaded(await a.repo.getClimb(draft.id)));
+  assert.eq(a.sync.stateOf('home-wall').status, 'ok');
+  assert.eq(await kindOf(a.sync.upload(draft.id)), 'mine', 'it is already uploaded');
 });
 
-test('sync: a deleted climb stays deleted, unless someone edited it after it was deleted', async () => {
+test('board: an upload whose answer was lost is recognised on the second try', async () => {
   const backend = new FakeFirebase();
-  const a = await phone(backend);
-  const b = await phone(backend);
-  const stays = await a.repo.saveClimb(climbData({ name: 'Stays deleted' }));
-  const comes = await a.repo.saveClimb(climbData({ name: 'Edited after' }));
+  const a = await phone(backend, 'Alex');
+  const draft = await a.repo.saveClimb(climbData({ name: 'Lost answer' }));
   const code = await a.sync.createBoard('home-wall');
-  tick(backend);
-  await b.sync.joinBoard('home-wall', code);
-
-  backend.offline = true;
-  tick(backend);
-  await a.repo.deleteClimb(stays.id);
-  await a.repo.deleteClimb(comes.id);
-  tick(backend);
-  await b.repo.saveClimb(climbData({ id: comes.id, name: 'Edited after' + '!' })); // later than A's deletion
-  backend.offline = false;
-
-  tick(backend);
-  await a.sync.syncWall('home-wall');
-  tick(backend);
-  await b.sync.syncWall('home-wall');
-  assert.eq(await names(b), ['Edited after!'], 'B lost the one it did not touch, and kept its later edit');
-  tick(backend);
-  await a.sync.syncWall('home-wall');
-  assert.eq(await names(a), ['Edited after!'], 'and A takes the edited climb back');
+  await a.sync.remote.createClimb(code, draft.id, toRecord(draft)); // it got there, but the phone never heard
+  assert.ok(!isUploaded(await a.repo.getClimb(draft.id)));
+  await a.sync.upload(draft.id);
+  assert.ok(isUploaded(await a.repo.getClimb(draft.id)), 'marked as uploaded without a second copy');
+  assert.eq([...backend.docs.keys()].filter((path) => path.includes('/climbs/')).length, 1);
 });
 
-test('sync: joining needs a real code for the same wall, and says what is wrong', async () => {
+test('board: joining needs a real code for the same wall, and says what is wrong', async () => {
   const backend = new FakeFirebase();
   const a = await phone(backend);
   const code = await a.sync.createBoard('home-wall');
-  const c = await phone(backend);
+  const c = await phone(backend, 'Cy');
   await c.repo.saveWall({ ...WALL, key: 'other-wall', name: 'Other wall' });
   assert.eq(await kindOf(c.sync.joinBoard('home-wall', 'hello')), 'code');
   assert.eq(await kindOf(c.sync.joinBoard('home-wall', 'abcd-efgh-jkmn-pqrs')), 'notfound');
@@ -340,108 +418,106 @@ test('sync: joining needs a real code for the same wall, and says what is wrong'
   assert.eq(await c.repo.getSyncSetup('other-wall'), undefined, 'a failed join leaves nothing behind');
 });
 
-test('sync: a big board comes across in pages, and a sync with nothing new asks the database once and sends nothing', async () => {
+test('board: a big board comes across in pages, and a check with nothing new asks the database once', async () => {
   const backend = new FakeFirebase();
-  const a = await phone(backend);
-  for (let i = 0; i < 650; i++) await a.repo.saveClimb(climbData({ name: `Climb ${i}`, holds: `${(i % 9) + 1}:hand` }));
+  const a = await phone(backend, 'Alex');
   const code = await a.sync.createBoard('home-wall');
-  assert.eq(backend.requests.filter((r) => r.includes('commit')).length, 7, 'sent 100 at a time');
+  // 650 climbs already on the board, stamped five at a time like climbs sent together.
+  for (let i = 0; i < 650; i++) {
+    const id = `planted-climb-${String(i).padStart(4, '0')}`;
+    const stamp = `2027-01-15T08:00:${String(Math.floor(i / 5) % 60).padStart(2, '0')}.${String(Math.floor(i / 300)).padStart(3, '0')}000Z`;
+    backend.docs.set(`boards/${code}/climbs/${id}`, { fields: { ...toFields({ name: `Climb ${i}`, author: 'Zed', holds: `${(i % 9) + 1}:hand`, createdAt: NOW }), serverTime: { timestampValue: stamp } } });
+  }
   tick(backend);
-  const b = await phone(backend);
+  const b = await phone(backend, 'Bea');
   const before = count(backend, 'runQuery');
   await b.sync.joinBoard('home-wall', code);
   assert.ok(count(backend, 'runQuery') - before >= 3, 'several pages were asked for');
   assert.eq((await b.repo.listClimbs('home-wall')).length, 650);
-  tick(backend);
   const asked = backend.requests.length;
   const idle = await b.sync.syncWall('home-wall');
-  assert.eq(backend.requests.length - asked, 1, 'one question for what is new, nothing sent');
-  assert.eq([idle.added, idle.updated, idle.deleted, idle.sent], [0, 0, 0, 0]);
-  await a.repo.saveClimb(climbData({ name: 'One more' }));
-  await a.sync.syncWall('home-wall');
-  tick(backend);
-  const fresh = await b.sync.syncWall('home-wall');
-  assert.eq(fresh.added, 1, 'only the new climb comes across');
+  assert.eq(backend.requests.length - asked, 1, 'one question for what is new');
+  assert.eq([idle.added, idle.replaced], [0, 0]);
 });
 
-test('sync: a climb imported from a file is sent on the next sync, and stopping keeps the climbs', async () => {
+test('board: odd things on the board are skipped or limited, and cannot stop later climbs arriving', async () => {
   const backend = new FakeFirebase();
-  const a = await phone(backend);
-  const b = await phone(backend);
+  const a = await phone(backend, 'Alex');
+  const b = await phone(backend, 'Bea');
   const code = await a.sync.createBoard('home-wall');
   await b.sync.joinBoard('home-wall', code);
-  tick(backend);
-  const parsed = parseShare({ format: 'spraywall-climbs', version: 1, wall: { key: 'home-wall', name: 'Home wall' }, climbs: [{ id: 'from-a-file-01', name: 'From a file', grade: 3, stars: 2, holds: '1:hand', createdAt: 5, updatedAt: 9 }] }, NOW);
-  await b.repo.applyImport(await b.repo.planImport(parsed));
-  await b.sync.syncWall('home-wall');
-  tick(backend);
-  await a.sync.syncWall('home-wall');
-  assert.eq(await names(a), ['From a file']);
-  await b.sync.stop('home-wall');
-  assert.eq(await b.repo.getSyncSetup('home-wall'), undefined);
-  assert.eq(await names(b), ['From a file'], 'the climbs stay on the phone');
-  const asked = backend.requests.length;
-  await b.sync.syncAll();
-  assert.eq(backend.requests.length, asked, 'a phone that stopped asks nothing');
-});
-
-test('sync: odd things on the board are skipped or limited, and cannot stop later climbs arriving', async () => {
-  const backend = new FakeFirebase();
-  const a = await phone(backend);
-  const b = await phone(backend);
-  const code = await a.sync.createBoard('home-wall');
-  await b.sync.joinBoard('home-wall', code);
-  const plant = (id, fields) => backend.docs.set(`boards/${code}/climbs/${id}`, { fields });
-  const text = (stringValue) => ({ stringValue });
-  const whole = (n) => ({ integerValue: String(n) });
-  const justAfterNow = `${new Date(backend.clock.now + 1000).toISOString().slice(0, -1)}001Z`;
-  plant('junk-holds-0001', { id: text('junk-holds-0001'), name: text('Junk'), holds: text('nonsense'), updatedAt: whole(5), serverTime: { timestampValue: justAfterNow } });
-  plant('from-the-future', { id: text('from-the-future'), name: text('Future'), holds: text('1:hand'), updatedAt: whole(5), serverTime: { timestampValue: '2999-01-01T00:00:00.000000Z' } });
+  const stampAfterNow = `${new Date(backend.clock.now + 1000).toISOString().slice(0, -1)}001Z`;
+  const plant = (id, fields, stamp) => backend.docs.set(`boards/${code}/climbs/${id}`, { fields: { ...toFields(fields), serverTime: { timestampValue: stamp } } });
+  plant('junk-holds-0001', { name: 'Junk', author: 'Zed', holds: 'nonsense', createdAt: NOW }, stampAfterNow);
+  plant('no-author-0001', { name: 'Nobody', author: '', holds: '1:hand', createdAt: NOW }, stampAfterNow);
+  plant('from-the-future', { name: 'Future', author: 'Zed', holds: '1:hand', createdAt: NOW }, '2999-01-01T00:00:00.000000Z');
   tick(backend);
   await b.sync.syncWall('home-wall');
   assert.ok((await b.repo.getSyncSetup('home-wall')).lastPull < '2100', 'a stamp from the far future is not followed');
   tick(backend);
-  await a.repo.saveClimb(climbData({ name: 'Real one' }));
-  await a.sync.syncWall('home-wall');
+  const real = await a.repo.saveClimb(climbData({ name: 'Real one' }));
+  await a.sync.upload(real.id);
   tick(backend);
   await b.sync.syncWall('home-wall');
-  assert.ok((await names(b)).includes('Real one'), 'climbs sent later still arrive');
-  assert.ok(!(await names(b)).includes('Junk'), 'a climb without usable holds is skipped');
+  assert.ok((await names(b)).includes('Real one'), 'climbs uploaded later still arrive');
+  assert.ok(!(await names(b)).includes('Junk') && !(await names(b)).includes('Nobody'), 'climbs without usable holds or a name are skipped');
 });
 
-test('sync: problems show up as the wall\'s state, and the next try works once they are fixed', async () => {
+test('board: stopping keeps every climb, uploaded ones stay uploaded, and the phone asks nothing more', async () => {
   const backend = new FakeFirebase();
-  const a = await phone(backend);
-  const code = await a.sync.createBoard('home-wall');
+  const a = await phone(backend, 'Alex');
+  const climb = await a.repo.saveClimb(climbData());
+  await a.sync.createBoard('home-wall');
+  await a.sync.upload(climb.id);
+  await a.sync.stop('home-wall');
+  assert.eq(await a.repo.getSyncSetup('home-wall'), undefined);
+  assert.eq(await names(a), ['One']);
+  assert.ok(isUploaded(await a.repo.getClimb(climb.id)));
+  const asked = backend.requests.length;
+  await a.sync.syncAll();
+  assert.eq(backend.requests.length, asked);
+  const second = await a.repo.saveClimb(climbData({ name: 'After' }));
+  assert.eq(await kindOf(a.sync.upload(second.id)), 'board', 'without a board nothing can be uploaded');
+});
+
+test('board: problems show up as the wall\'s state, and the next try works once they are fixed', async () => {
+  const backend = new FakeFirebase();
+  const a = await phone(backend, 'Alex');
+  await a.sync.createBoard('home-wall');
   const seen = [];
   a.sync.onState((key) => seen.push(a.sync.stateOf(key).status));
-  await a.repo.saveClimb(climbData({ name: 'Waiting' }));
   backend.quotaUsedUp = true;
   tick(backend);
   assert.eq(await kindOf(a.sync.syncWall('home-wall')), 'quota');
   assert.eq(a.sync.stateOf('home-wall').status, 'error');
   assert.ok(a.sync.stateOf('home-wall').message.includes('daily limit'));
   backend.quotaUsedUp = false;
-  tick(backend);
+  backend.offline = true;
+  assert.eq(await kindOf(a.sync.syncWall('home-wall')), 'offline');
+  assert.eq(a.sync.stateOf('home-wall').status, 'offline');
+  backend.offline = false;
   await a.sync.syncWall('home-wall');
   assert.eq(a.sync.stateOf('home-wall').status, 'ok');
-  assert.eq((await a.repo.climbsToSend('home-wall', code)).length, 0);
-  assert.ok(seen.includes('syncing') && seen.includes('error') && seen.at(-1) === 'ok', seen.join(','));
+  assert.ok(seen.includes('syncing') && seen.includes('error') && seen.includes('offline') && seen.at(-1) === 'ok', seen.join(','));
 });
 
-test('sync: changing a climb makes the app sync by itself shortly after', async () => {
+test('board: the app looks for new climbs by itself after a change, and does not loop', async () => {
   const backend = new FakeFirebase();
-  const a = await phone(backend);
-  const b = await phone(backend);
+  const a = await phone(backend, 'Alex');
+  const b = await phone(backend, 'Bea');
   const code = await a.sync.createBoard('home-wall');
   await b.sync.joinBoard('home-wall', code);
   const quiet = { addEventListener() {}, removeEventListener() {}, document: { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} } };
-  a.sync.start(quiet);
+  b.sync.start(quiet);
   tick(backend);
-  await a.repo.saveClimb(climbData({ name: 'By itself' }));
+  const climb = await a.repo.saveClimb(climbData({ name: 'By itself' }));
+  await a.sync.upload(climb.id);
+  tick(backend);
+  await b.repo.setRating('whatever-id-0001', 3); // a change on b: it looks for new climbs shortly after
   await new Promise((resolve) => setTimeout(resolve, 400));
-  a.sync.destroy();
-  tick(backend);
-  await b.sync.syncWall('home-wall');
   assert.eq(await names(b), ['By itself']);
+  const quietCount = backend.requests.length;
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.eq(backend.requests.length, quietCount, 'once it has everything it stops asking');
+  b.sync.destroy();
 });

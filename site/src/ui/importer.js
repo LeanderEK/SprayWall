@@ -1,7 +1,7 @@
 import { app, wallPicture } from '../app.js';
 import { gradeLabel, marksOf } from '../domain/climbs.js';
 import { ShareError, unpackShare } from '../domain/share.js';
-import { h, isIos, isStandalone, stars, toast } from './dom.js';
+import { h, isIos, isStandalone, toast } from './dom.js';
 import { appBar } from './list.js';
 import { PAINT, WallView, drawThumb } from './wallview.js';
 
@@ -40,7 +40,7 @@ export async function mountImporter(root, { payload }) {
     const [label, tone] = STATUS_TEXT[status];
     const thumb = h('canvas', { class: 'thumb', style: { width: '56px', height: '72px' } });
     if (wall) queueMicrotask(() => requestAnimationFrame(() => alive && thumb.isConnected && drawThumb(thumb, wall, picture, marksOf(climb), PAINT.thumb)));
-    return h('div', { class: 'row static' }, wall ? thumb : null, h('div', { class: 'row-text' }, h('div', { class: 'row-name' }, climb.name), stars(climb.stars, { size: 16 }), climb.author ? h('div', { class: 'row-author' }, `by ${climb.author}`) : null, h('span', { class: `badge ${tone}` }, label)), h('div', { class: 'row-grade' }, gradeLabel(climb.grade)));
+    return h('div', { class: 'row static' }, wall ? thumb : null, h('div', { class: 'row-text' }, h('div', { class: 'row-name' }, climb.name), climb.author ? h('div', { class: 'row-author' }, `by ${climb.author}`) : null, h('span', { class: `badge ${tone}` }, label)), h('div', { class: 'row-grade' }, gradeLabel(climb.grade)));
   });
 
   let preview = null;
