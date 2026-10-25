@@ -209,7 +209,7 @@ function explain(status, data) {
   if (/API key not valid|API_KEY_INVALID|INVALID_API_KEY/i.test(code) || /API_KEY/.test(state)) return new SyncError('setup', 'The Firebase API key in the app is not accepted.');
   if (status === 429 || state === 'RESOURCE_EXHAUSTED' || /QUOTA|TOO_MANY/.test(code)) return new SyncError('quota', 'The free daily limit of the shared database has been used up. It works again tomorrow.');
   if (status === 404 || state === 'NOT_FOUND') return new SyncError('notfound', 'Not found.');
-  if (status === 409 || state === 'ALREADY_EXISTS') return new SyncError('exists', 'That board already exists.');
+  if (status === 409 || state === 'ALREADY_EXISTS') return new SyncError('exists', 'That already exists.');
   const detail = code ? ` (${code.slice(0, 140)})` : '';
   if (status === 401 || status === 403 || state === 'PERMISSION_DENIED' || state === 'UNAUTHENTICATED') return new SyncError('denied', `The shared database refused this. Its rules may not be set up yet.${detail}`);
   return new SyncError('server', `The shared database had a problem (${status}).${detail}`);
