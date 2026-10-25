@@ -16,17 +16,23 @@ from pathlib import Path
 SITE = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent / "site"
 
 
+VERSION_LINE = re.compile(r"const VERSION = '[^']*';")
+ASSETS_LIST = re.compile(r"const ASSETS = \[.*?\];", re.S)
+
+
 def main() -> None:
     files = sorted(p.relative_to(SITE).as_posix() for p in SITE.rglob("*") if p.is_file() and p.name != "sw.js")
+    sw = (SITE / "sw.js").read_text(encoding="utf-8")
     digest = hashlib.sha256()
     for name in files:
         digest.update(name.encode())
         digest.update((SITE / name).read_bytes())
+    # The worker's own code counts too (everything but the two parts written below), so changing it is a new version.
+    digest.update(ASSETS_LIST.sub("", VERSION_LINE.sub("", sw)).encode())
     version = digest.hexdigest()[:12]
     assets = ["./"] + [f"./{name}" for name in files]
-    sw = (SITE / "sw.js").read_text(encoding="utf-8")
-    sw = re.sub(r"const VERSION = '[^']*';", f"const VERSION = '{version}';", sw)
-    sw = re.sub(r"const ASSETS = \[.*?\];", "const ASSETS = " + json.dumps(assets, indent=2) + ";", sw, flags=re.S)
+    sw = VERSION_LINE.sub(f"const VERSION = '{version}';", sw)
+    sw = ASSETS_LIST.sub("const ASSETS = " + json.dumps(assets, indent=2) + ";", sw)
     (SITE / "sw.js").write_text(sw, encoding="utf-8", newline="\n")
     print(f"version {version}, {len(assets)} files saved for offline use")
 

@@ -26,6 +26,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: List the files to save for offline use and set the version
         run: python3 tools/stamp.py
+      # After the step above, so the phone does not save the 3.7 MB wall pack with the app: it is only a download.
+      - name: Add the wall and climbs downloads
+        run: cp -r wall site/wall
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

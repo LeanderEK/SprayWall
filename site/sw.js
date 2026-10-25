@@ -2,7 +2,7 @@
 // signal afterwards. Run `python tools/stamp.py` after changing any file in this folder: it rewrites the two lines below
 // (the list of files to save, and a version made from their contents) so phones notice the new version.
 
-const VERSION = '480ae42d2924';
+const VERSION = '772fc500349d';
 const ASSETS = [
   "./",
   "./icons/apple-touch-icon.png",
@@ -64,8 +64,11 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(request, { ignoreSearch: true }).then((saved) => {
       if (saved) return saved;
-      // A page address we have not saved (for example one typed by hand) still opens the app.
-      if (request.mode === 'navigate') return caches.match('./index.html').then((page) => page || fetch(request));
+      // A page address we have not saved (for example one typed by hand) still opens the app. An address ending in a file
+      // name, such as the wall pack download, is a real file and goes to the web as it is.
+      if (request.mode === 'navigate' && /\/[^/.]*$/.test(new URL(request.url).pathname)) {
+        return caches.match('./index.html').then((page) => page || fetch(request));
+      }
       return fetch(request);
     }),
   );

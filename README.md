@@ -12,11 +12,16 @@ between them by file (see "Moving your Android climbs").
 
 ## What goes online and what does not
 
-Only the **`site`** folder is ever put online. It is the app itself: no wall photo, no hold map, no climbs.
+The app itself (the **`site`** folder) holds no wall photo, no hold map and no climbs.
 
-Your wall photo and holds live in `private/work/home-wall.zip` and your climbs in `private/my-climbs.spraywall.json`.
-Those stay on your computer (the `private` folder is not part of the site). You load them into the app on each device
-yourself, once, from a file. Do not put them in the same place you host the app.
+The wall pack and the climbs are in the **`wall`** folder of this repository, on purpose and public (the owner said that
+is fine): `wall/home-wall.zip` (photo and 524 holds) and `wall/my-climbs.spraywall.json`. The publish step also puts them
+on the live site, with a small download page at `https://leanderek.github.io/SprayWall/wall/get.html`. They are not
+saved with the app for offline use; you load them into the app once per device from a file.
+
+The working copies stay in `private/` (`private/work/home-wall.zip`, `private/my-climbs.spraywall.json`, not in the
+repository). When you export a new wall pack or a newer climbs file, copy it over the one in `wall/` and push.
+`private/` also holds the hand-editing and test files that are never published.
 
 ## 1. Put the app on the internet (once)
 
@@ -26,8 +31,8 @@ use. After that first visit the phone no longer needs the address.
 Any free static web host will do. The two easiest:
 
 **GitHub Pages** (how this project is set up: github.com/LeanderEK/SprayWall)
-1. The whole project is in the repository (a free account needs it to be public; it holds no wall photo or climbs).
-   `.github/workflows/pages.yml` publishes only the `site` folder.
+1. The whole project is in the repository (a free account needs it to be public; the wall pack and climbs in `wall/` are public too, on purpose).
+   `.github/workflows/pages.yml` publishes the `site` folder and the `wall` downloads.
 2. Once: repository Settings → Pages → Build and deployment → Source: **GitHub Actions**.
 3. Every push to `main` publishes again (Actions tab shows the progress). The app is at
    `https://leanderek.github.io/SprayWall/`.
@@ -48,9 +53,10 @@ mode and open it again to check: it should start, with no connection.
 
 ## 3. Load the wall and your climbs (once per device)
 
-1. Get `home-wall.zip` onto the device (AirDrop, Files, a message to yourself, a cable: whatever you like).
-2. In the app: mountain icon (Walls) → **Import wall pack** → choose the zip. It takes a few seconds.
-3. Get a climbs file onto the device, then on the list: share icon → **From a file**.
+1. Open `https://leanderek.github.io/SprayWall/wall/get.html` on the device and download both files (or send them
+   over by AirDrop, a message to yourself, a cable: whatever you like).
+2. In the app: mountain icon (Walls) → **Import wall pack** → choose `home-wall.zip`. It takes a few seconds.
+3. On the list: share icon → **From a file** → choose `my-climbs.spraywall.json`.
 
 A friend does the same with the wall pack you give them. Then you can send them climbs.
 

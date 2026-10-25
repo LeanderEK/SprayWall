@@ -1,0 +1,43 @@
+{
+ "format": "spraywall-climbs",
+ "version": 1,
+ "wall": {
+  "key": "home-wall",
+  "name": "Adrenaline Vault Belmont"
+ },
+ "climbs": [
+  {
+   "id": "994fc703-9b41-5503-981c-4f3bb4d9e7d7",
+   "name": "Under the sea",
+   "grade": 6,
+   "stars": 5,
+   "comment": "Underclings with a hard right heel.\nEnd is W.I.P",
+   "author": "",
+   "holds": "62:finish,101:hand,225:hand,258:hand,348:hand,385:hand,386:hand,415:foot,463:foot,468:start,545:foot,546:foot,547:foot,592:foot",
+   "createdAt": 1792771277386,
+   "updatedAt": 1792772270344
+  },
+  {
+   "id": "282d3fae-7df5-5129-a35d-660b3b898c98",
+   "name": "Circuit no circuit",
+   "grade": 6,
+   "stars": 5,
+   "comment": "Fun strong, slightly techy boulder.",
+   "author": "",
+   "holds": "152:finish,184:hand,259:hand,311:hand,325:start,350:hand,415:foot,489:foot,510:foot",
+   "createdAt": 1792772544744,
+   "updatedAt": 1792772544744
+  },
+  {
+   "id": "ecdd83a5-c38e-5a65-b0f0-c1e493e23e01",
+   "name": "Swoobap",
+   "grade": 6,
+   "stars": 5,
+   "comment": "By Zeke\nDirectional holds. Somewhat powerful.",
+   "author": "",
+   "holds": "122:hand,159:hand,160:hand,161:hand,273:hand,328:hand,386:start,496:foot,583:start,595:finish",
+   "createdAt": 1792774888771,
+   "updatedAt": 1792774913178
+  }
+ ]
+}

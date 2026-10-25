@@ -70,6 +70,14 @@ def part_one():
         browser.wait_for("document.querySelectorAll('.row').length === 3", what="three climbs in the list")
         check(True, "online: wall and 3 climbs loaded, list shows them")
 
+        # With the worker in charge: an address that ends in a file name must give that file (the wall pack download is
+        # one), while an address without one still opens the app.
+        browser.go(f"{base}/site/sw.js")
+        shown = browser.eval("document.body.innerText")
+        check("const VERSION" in shown, "online: a link to a file opens that file, not the app")
+        browser.go(f"{base}/site/some-page-typed-by-hand")
+        check(browser.wait_for("document.querySelectorAll('.row').length", what="the app at an address with no file name") == 3, "online: an address with no file name opens the app")
+
         # Now switch the server off for real.
         server.stop()
         down = browser.eval(
