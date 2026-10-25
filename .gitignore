@@ -2,3 +2,4 @@
 /private/
 .DS_Store
 /tools/.venv/
+__pycache__/

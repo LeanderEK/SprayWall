@@ -6,6 +6,7 @@ import { defaultQuery } from './domain/climbs.js';
 export const app = {
   repo: null,
   nav: null,
+  sync: null, // the SyncService (see data/sync.js)
   query: defaultQuery(),
   pending: null, // a share (already checked) waiting on the import screen
   leaveGuard: null, // set by the editor while it has unsaved changes: () => Promise<boolean>

@@ -24,7 +24,7 @@ export class ShareError extends Error {}
 const ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 const KEY_PATTERN = /^[A-Za-z0-9._-]{1,80}$/;
 
-function cleanText(value, max) {
+export function cleanText(value, max) {
   if (typeof value !== 'string') return '';
   return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim().slice(0, max).trim();
 }
@@ -92,7 +92,15 @@ export function parseShare(input, now = Date.now()) {
   return { wallKey: wall.key, wallName: cleanText(wall.name, 80) || wall.key, climbs, skipped };
 }
 
-function cleanClimb(raw, now) {
+/** A climb that someone deleted, as it arrives from a sync: only { id, name, deletedAt, updatedAt } is kept. */
+export function cleanDeleted(raw, now) {
+  if (raw === null || typeof raw !== 'object' || typeof raw.id !== 'string' || !ID_PATTERN.test(raw.id)) return null;
+  const deletedAt = typeof raw.deletedAt === 'number' && Number.isFinite(raw.deletedAt) && raw.deletedAt > 0 ? Math.min(raw.deletedAt, now + 24 * 60 * 60 * 1000) : null;
+  if (deletedAt === null) return null;
+  return { id: raw.id, name: cleanText(raw.name, MAX_NAME) || 'Deleted climb', deletedAt, updatedAt: deletedAt };
+}
+
+export function cleanClimb(raw, now) {
   if (raw === null || typeof raw !== 'object') return null;
   if (typeof raw.id !== 'string' || !ID_PATTERN.test(raw.id)) return null;
   const marks = parseMarks(typeof raw.holds === 'string' ? raw.holds.slice(0, 20_000) : '');

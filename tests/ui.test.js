@@ -1,12 +1,17 @@
 import { assert, test } from './harness.js';
+import { FakeFirebase } from './fakefirebase.js';
 import { drag, pinch, tap } from './touch.js';
 import { app } from '../site/src/app.js';
+import { FirestoreRemote } from '../site/src/data/firestore.js';
 import { MemoryStore, Repo } from '../site/src/data/repo.js';
+import { SyncService } from '../site/src/data/sync.js';
 import { parseShare } from '../site/src/domain/share.js';
 import { Viewport } from '../site/src/domain/viewport.js';
 import { mountEditor } from '../site/src/ui/editor.js';
 import { mountImporter } from '../site/src/ui/importer.js';
 import { mountList } from '../site/src/ui/list.js';
+import { openSharingSheet } from '../site/src/ui/sharing.js';
+import { openSyncSheet } from '../site/src/ui/syncsheet.js';
 import { mountViewer } from '../site/src/ui/viewer.js';
 import { mountWalls } from '../site/src/ui/walls.js';
 import { PAINT, WallView } from '../site/src/ui/wallview.js';
@@ -483,4 +488,78 @@ test('walls: the list shows the wall, rename works from the dialog, and delete a
   assert.eq(await repo.getWall('test-wall'), undefined);
   assert.eq((await repo.listClimbs('test-wall')).length, 0);
   screen.destroy();
+});
+
+// ---- sync ----
+
+/** The app's sync, talking to a stand-in for Firebase. */
+function syncWith(repo, backend = new FakeFirebase()) {
+  const tokens = { load: () => repo.getMeta('syncAuth'), save: (auth) => repo.setMetaQuietly('syncAuth', auth) };
+  const remote = new FirestoreRemote({ config: { apiKey: backend.apiKey, projectId: backend.projectId }, tokens, fetchImpl: backend.fetch, now: () => backend.clock.now });
+  app.sync = new SyncService({ repo, remote, now: () => backend.clock.now });
+  return backend;
+}
+const topSheet = () => [...document.querySelectorAll('.sheet')].at(-1);
+
+test('sync sheet: with no Firebase project the share sheet does not mention sync, and the panel says so', async () => {
+  const { repo } = await freshApp();
+  app.sync = new SyncService({ repo, remote: null });
+  await openSharingSheet();
+  assert.ok(!topSheet().textContent.includes('Sync with friends'));
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  await openSyncSheet();
+  assert.ok(topSheet().textContent.includes('not switched on'));
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  app.sync = null;
+});
+
+test('sync sheet: starting a board shows its code and how it went, and stopping goes back to the start', async () => {
+  const { repo } = await freshApp();
+  const backend = syncWith(repo);
+  await repo.saveClimb(climbData({ name: 'Sent along' }));
+  await openSharingSheet();
+  assert.ok(topSheet().textContent.includes('Sync with friends'));
+  click(buttonWith(topSheet(), 'Set up sync'));
+  await wait(100);
+  assert.eq(topSheet().querySelector('h2').textContent, 'Sync with friends');
+  click(buttonWith(topSheet(), 'Start a board'));
+  await wait(400);
+  const code = topSheet().querySelector('.board-code').textContent;
+  assert.ok(/^[a-z2-9]{4}(-[a-z2-9]{4}){3}$/.test(code), code);
+  assert.ok(topSheet().textContent.includes('Synced just now'), topSheet().textContent);
+  assert.eq([...backend.docs.keys()].filter((path) => path.includes('/climbs/')).length, 1, 'the climb was sent');
+  assert.eq((await repo.getSyncSetup('test-wall')).code, code.replaceAll('-', ''));
+  assert.ok(buttonWith(topSheet(), 'Copy') && buttonWith(topSheet(), 'Share') && buttonWith(topSheet(), 'Sync now'));
+
+  click(buttonWith(topSheet(), 'Stop syncing on this phone'));
+  await wait(50);
+  click(buttonWith(document.querySelector('.dialog'), 'Stop syncing'));
+  await wait(200);
+  assert.ok(buttonWith(topSheet(), 'Start a board'), 'back to the start');
+  assert.eq(await repo.getSyncSetup('test-wall'), undefined);
+  assert.eq((await repo.listClimbs('test-wall')).length, 1, 'the climbs stay');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  app.sync = null;
+});
+
+test('sync sheet: a wrong code, a code nobody has, and no connection are each explained', async () => {
+  const { repo } = await freshApp();
+  const backend = syncWith(repo);
+  await openSyncSheet();
+  const input = topSheet().querySelector('input[aria-label="Board code"]');
+  typeInto(input, 'hello');
+  click(buttonWith(topSheet(), 'Join'));
+  await wait(200);
+  assert.ok(topSheet().textContent.includes('does not look like a board code'), topSheet().textContent);
+  typeInto(topSheet().querySelector('input[aria-label="Board code"]'), 'abcd-efgh-jkmn-pqrs');
+  click(buttonWith(topSheet(), 'Join'));
+  await wait(300);
+  assert.ok(topSheet().textContent.includes('no board with that code'), topSheet().textContent);
+  backend.offline = true;
+  click(buttonWith(topSheet(), 'Start a board'));
+  await wait(300);
+  assert.ok(topSheet().textContent.includes('no connection'), topSheet().textContent);
+  assert.eq(await repo.getSyncSetup('test-wall'), undefined, 'nothing was set up');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  app.sync = null;
 });

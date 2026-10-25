@@ -1,6 +1,9 @@
 import { app } from './app.js';
 import { IdbStore, askToKeepData } from './data/db.js';
+import { FirestoreRemote } from './data/firestore.js';
 import { Repo } from './data/repo.js';
+import { SyncService } from './data/sync.js';
+import { FIREBASE } from './sync-config.js';
 import { h, toast } from './ui/dom.js';
 import { mountEditor } from './ui/editor.js';
 import { mountImporter } from './ui/importer.js';
@@ -133,10 +136,19 @@ async function start() {
     return;
   }
   askToKeepData();
+  startSync();
   depth = history.state?.depth ?? 0;
   if (history.state === null) history.replaceState({ depth: 0 }, '', location.href);
   await render();
   registerServiceWorker();
+}
+
+/** Keeps walls that have a shared board in step with it. Without a Firebase project in sync-config.js there is no sync. */
+function startSync() {
+  const tokens = { load: () => app.repo.getMeta('syncAuth'), save: (auth) => app.repo.setMetaQuietly('syncAuth', auth) };
+  const remote = FIREBASE ? new FirestoreRemote({ config: FIREBASE, tokens }) : null;
+  app.sync = new SyncService({ repo: app.repo, remote });
+  app.sync.start();
 }
 
 /** Saves the app on the phone so it opens with no signal, and offers new versions when they arrive. */

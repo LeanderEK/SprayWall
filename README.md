@@ -86,6 +86,46 @@ python tools/convert_android_climbs.py <that folder>
 
 It only reads the copy. Each climb always gets the same id, so importing again never doubles anything up.
 
+## Sync with friends (Firebase)
+
+Optional. Phones that join the same **board** keep the climbs of a wall the same, automatically: new, edited and deleted
+climbs. Everything still works with no connection; changes are sent, and friends' changes fetched, whenever the app is open
+and online (a couple of seconds after you change something, when you open the app, and every two minutes while it is open).
+iOS does not allow apps to sync in the background, so a phone catches up when the app is next opened.
+
+Only the climbs sync (name, grade, stars, comment, who set it, holds). The wall photo does not: everyone loads the wall pack
+once. A board belongs to one wall (its key, `home-wall`), and a phone can only join a board for a wall it has.
+
+**The board code is the password.** It is 16 random letters and digits (`k7f2-9xqm-c4ta-p8dn`); nobody can list or guess
+boards. Whoever has the code can see, add, change and delete the climbs on the board, so give it only to friends. The app
+shows it under share icon → Sync with friends. Stopping sync on a phone keeps its climbs.
+
+How a merge works: for each climb the newer change wins. A climb that was deleted stays on the board as a small marker, so a
+phone that was offline cannot bring it back (unless someone edited it after the deletion, which wins). The shared database
+stamps every change with its own clock, so a phone with a wrong clock cannot make others miss changes.
+
+### Setting up the Firebase project (once, free, about 10 minutes)
+
+1. Go to console.firebase.google.com and sign in with a Google account. Create a project (name it SprayWall; Google
+   Analytics is not needed, switch it off).
+2. **Firestore**: Databases & Storage (or Build) → Firestore → Create database → Standard edition → pick a location near
+   you → **Production mode** → Create.
+3. **Rules**: Firestore → Rules tab → replace everything with the contents of `firebase/firestore.rules` → Publish.
+4. **Sign-in**: Authentication → Get started → Sign-in method → **Anonymous** → Enable → Save. (Nobody types a password;
+   this only gives each phone a token the database asks for.)
+5. **The app's two values**: Project settings (gear) → General → Your apps → the web icon `</>` → give it a nickname →
+   Register app (leave Hosting off). The config shows `apiKey` and `projectId`.
+6. Put them in `site/src/sync-config.js` (replace `null`), run the tests, push. The share icon then has "Sync with friends".
+7. Prove it against the real project: `tools\.venv\Scripts\python.exe tools\firebase_check.py` (leaves one test board).
+
+The two values are not secrets (every phone running the app has them); the rules decide who may do what. GitHub may email a
+warning about a Google API key in the repository; for a Firebase web key that is expected. To tighten it further, in Google
+Cloud console → APIs & Services → Credentials, restrict that key to the website `https://leanderek.github.io/*`.
+
+Free plan limits (Spark): about 1 GiB stored, 50,000 reads and 20,000 writes per day; no card is needed. A friend group stays
+far below that (a sync that finds nothing new costs one read). If the daily limit were ever reached the database would stop
+until the next day; the app says so and keeps working offline.
+
 ## Updating the app
 
 After changing anything in `site`, commit and push to `main`. The publish step runs `python tools/stamp.py` itself, so

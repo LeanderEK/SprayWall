@@ -1,6 +1,7 @@
 import { app } from '../app.js';
 import { makeShare, packShare, parseShare, linkFor, shareToText, ShareError, unpackShare } from '../domain/share.js';
 import { copyText, filePickerButton, h, isIos, isStandalone, openSheet, shareFile, shareLink, toast } from './dom.js';
+import { openSyncSheet, syncStatusText } from './syncsheet.js';
 
 // Everything about getting climbs to and from other people: files, links, pasted links, and a backup of everything.
 
@@ -77,6 +78,8 @@ export async function shareEverything(wall) {
 export async function openSharingSheet() {
   const wall = await app.repo.activeWall();
   const name = await app.repo.authorName();
+  const setup = wall && app.sync?.available ? await app.repo.getSyncSetup(wall.key) : null;
+  const syncLine = setup ? `Synced with a board. ${syncStatusText(app.sync.stateOf(wall.key), setup)}` : '';
   const nameInput = h('input', { class: 'field', type: 'text', maxlength: 40, value: name, placeholder: 'Your name', 'aria-label': 'Your name', autocomplete: 'off' });
   nameInput.addEventListener('change', () => app.repo.setMeta('author', nameInput.value.trim().slice(0, 40)));
   const pasteBox = h('textarea', { class: 'field', rows: 2, placeholder: 'Paste a SprayWall link here', 'aria-label': 'Pasted link' });
@@ -99,6 +102,13 @@ export async function openSharingSheet() {
     h('h3', {}, 'Share your climbs'),
     h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn', disabled: !wall, onclick: () => { sheet.close(); shareEverything(wall); } }, 'Share all as a file')),
     h('p', { class: 'note' }, 'To share one climb, open it and tap the share button. Saving all climbs as a file also makes a backup.'),
+    app.sync?.available
+      ? [
+          h('h3', {}, 'Sync with friends'),
+          h('p', { class: 'note' }, syncLine || 'Keep the climbs the same on every phone, automatically.'),
+          h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn', disabled: !wall, onclick: () => { sheet.close(); openSyncSheet(); } }, syncLine ? 'Sync settings' : 'Set up sync')),
+        ]
+      : null,
   );
   sheet = openSheet('Share and import', content);
 }

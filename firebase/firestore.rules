@@ -1,0 +1,48 @@
+rules_version = '2';
+
+// The rules of SprayWall's shared database. Paste all of this into Firebase console -> Firestore Database -> Rules -> Publish.
+//
+// The database holds boards. A board is found only by its code (16 random letters and digits, so nobody can guess one),
+// and boards cannot be listed. Whoever knows a board's code may read the board's climbs and add or change them.
+// Nothing can be deleted: a deleted climb is kept as a small marker, so that a phone that was offline cannot bring it back.
+// Every climb is checked for the right fields, types and sizes, and its `serverTime` has to be the database's own clock.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function validClimb(d, id) {
+      return d.keys().hasOnly(['id', 'name', 'grade', 'stars', 'comment', 'author', 'holds', 'createdAt', 'updatedAt', 'deletedAt', 'serverTime'])
+        && d.keys().hasAll(['id', 'name', 'updatedAt', 'serverTime'])
+        && d.id == id
+        && d.id.matches('[A-Za-z0-9_-]{8,64}')
+        && d.name is string && d.name.size() <= 80
+        && d.updatedAt is int
+        && d.serverTime == request.time
+        && d.get('grade', 0) is int && d.get('grade', 0) >= 0 && d.get('grade', 0) <= 17
+        && d.get('stars', 0) is int && d.get('stars', 0) >= 0 && d.get('stars', 0) <= 5
+        && d.get('comment', '') is string && d.get('comment', '').size() <= 2000
+        && d.get('author', '') is string && d.get('author', '').size() <= 40
+        && d.get('holds', '') is string && d.get('holds', '').size() <= 20000
+        && d.get('createdAt', 0) is int
+        && d.get('deletedAt', 0) is int;
+    }
+
+    match /boards/{board} {
+      allow get: if signedIn();
+      allow create: if signedIn()
+        && board.matches('[a-z2-9]{16}')
+        && request.resource.data.keys().hasOnly(['wallKey', 'wallName', 'createdAt'])
+        && request.resource.data.wallKey is string && request.resource.data.wallKey.size() <= 80
+        && request.resource.data.wallName is string && request.resource.data.wallName.size() <= 80
+        && request.resource.data.createdAt is int;
+
+      match /climbs/{climb} {
+        allow get, list: if signedIn();
+        allow create, update: if signedIn() && validClimb(request.resource.data, climb);
+      }
+    }
+  }
+}

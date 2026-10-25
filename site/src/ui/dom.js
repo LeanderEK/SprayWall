@@ -205,6 +205,19 @@ export async function shareLink(url, title) {
   return (await copyText(url)) ? 'copied' : 'failed';
 }
 
+/** Shares a piece of text with the phone's share sheet, or copies it. */
+export async function shareText(text, title) {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, text });
+      return 'shared';
+    } catch (error) {
+      if (error?.name === 'AbortError') return 'cancelled';
+    }
+  }
+  return (await copyText(text)) ? 'copied' : 'failed';
+}
+
 export async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);

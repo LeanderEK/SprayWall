@@ -1,5 +1,6 @@
 import { cleanWallName } from '../domain/climbs.js';
 import { makeShare } from '../domain/share.js';
+import { decideRemote, syncMark, versionOf } from '../domain/sync.js';
 
 // Everything the app remembers, behind one object. It talks to a "store" with four calls (get, put, remove, all) over
 // three tables: walls (keyed by `key`), climbs (keyed by `id`) and meta (keyed by `k`). The real app uses IndexedDB
@@ -9,6 +10,8 @@ import { makeShare } from '../domain/share.js';
 // A climb is { id, wallKey, name, grade, stars, comment, author, holds, createdAt, updatedAt } and, once deleted, keeps
 // only { id, wallKey, name, deletedAt, updatedAt }. The deleted record is a marker that stops an old copy of the climb,
 // arriving later in a shared file, from bringing it back.
+// A climb that is kept in sync also carries a `syncMark` ("<board code>:<version>") saying which version of it the shared
+// board has. Any change made here builds the climb afresh, which drops the mark, and that is how "needs sending" is known.
 
 export const newId = () => {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -67,6 +70,12 @@ export class Repo {
   async setMeta(k, value) {
     await this.#put('meta', { k, value });
     this.#changed();
+  }
+
+  /** Like setMeta, but nobody is told (for things the app keeps for itself, such as sign-in tokens). */
+  async setMetaQuietly(k, value) {
+    if (value === undefined) await this.store.remove('meta', k);
+    else await this.#put('meta', { k, value });
   }
 
   /** The name that goes on the climbs you set. */
@@ -128,6 +137,7 @@ export class Repo {
   async deleteWall(key) {
     for (const climb of await this.store.all('climbs')) if (climb.wallKey === key) await this.store.remove('climbs', climb.id);
     await this.store.remove('walls', key);
+    await this.store.remove('meta', `sync:${key}`);
     this.#changed();
   }
 
@@ -174,6 +184,58 @@ export class Repo {
     const now = this.now();
     await this.#put('climbs', { id, wallKey: climb.wallKey, name: climb.name, deletedAt: now, updatedAt: now });
     this.#changed();
+  }
+
+  // ---- syncing with a shared board (the steps are in sync.js) ----
+
+  /** The board a wall is kept in sync with: { code, lastPull, lastSyncedAt }, or undefined. */
+  getSyncSetup(wallKey) {
+    return this.getMeta(`sync:${wallKey}`);
+  }
+
+  /** Remembers (or with undefined, forgets) the board of a wall. Nobody is told: it is not a change to any climb. */
+  setSyncSetup(wallKey, setup) {
+    return this.setMetaQuietly(`sync:${wallKey}`, setup);
+  }
+
+  /** Every climb of the wall, deleted ones too, that the board `code` does not have the current version of. */
+  async climbsToSend(wallKey, code) {
+    return (await this.store.all('climbs')).filter((climb) => climb.wallKey === wallKey && climb.syncMark !== syncMark(code, climb));
+  }
+
+  /** Notes that these climbs, as they were when sent, are now on the board. A climb changed since then stays unsent. */
+  async markSent(code, sent) {
+    for (const was of sent) {
+      const now = await this.store.get('climbs', was.id);
+      if (now && versionOf(now) === versionOf(was)) await this.#put('climbs', { ...now, syncMark: syncMark(code, now) });
+    }
+  }
+
+  /**
+   * Takes in climbs from the board (already checked and cleaned). Each is added, replaces yours, deletes yours or is
+   * ignored, as decideRemote says. Returns how many were added, updated and deleted.
+   */
+  async applySynced(wallKey, code, remotes) {
+    const counts = { added: 0, updated: 0, deleted: 0 };
+    for (const remote of remotes) {
+      const mine = await this.store.get('climbs', remote.id);
+      if (mine && mine.wallKey !== wallKey) continue; // the same id on another wall here: leave it alone
+      const action = decideRemote(mine, remote);
+      const { serverTime, ...fields } = remote;
+      if (action === 'add' || action === 'update') {
+        const climb = { ...fields, wallKey };
+        await this.#put('climbs', { ...climb, syncMark: syncMark(code, climb) });
+        counts[action === 'add' ? 'added' : 'updated']++;
+      } else if (action === 'delete' || action === 'remember') {
+        const gone = { id: remote.id, wallKey, name: remote.name, deletedAt: remote.deletedAt, updatedAt: remote.deletedAt };
+        await this.#put('climbs', { ...gone, syncMark: syncMark(code, gone) });
+        if (action === 'delete') counts.deleted++;
+      } else if (action === 'same' && mine.syncMark !== syncMark(code, mine)) {
+        await this.#put('climbs', { ...mine, syncMark: syncMark(code, mine) });
+      }
+    }
+    if (counts.added + counts.updated + counts.deleted > 0) this.#changed();
+    return counts;
   }
 
   // ---- sharing ----
