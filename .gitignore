@@ -1,0 +1,4 @@
+# Your wall photo, climbs and any test packs. These are never part of the hosted site.
+/private/
+.DS_Store
+/tools/.venv/

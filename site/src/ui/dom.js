@@ -1,0 +1,224 @@
+// Small helpers for building the screens. Text is always put in with textContent / text nodes, never as HTML, so a name
+// or comment that arrives in a shared climb can never run as code.
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** h('div', { class: 'row', onclick: fn }, 'text', otherElement, [more, children]) */
+export function h(tag, props, ...children) {
+  const el = document.createElement(tag);
+  for (const [name, value] of Object.entries(props || {})) {
+    if (value === undefined || value === null || value === false) continue;
+    if (name === 'class') el.className = value;
+    else if (name === 'style' && typeof value === 'object') {
+      for (const [property, setting] of Object.entries(value)) {
+        // Custom properties like --c have to be set this way; the plain style object ignores them.
+        if (property.startsWith('--')) el.style.setProperty(property, setting);
+        else el.style[property] = setting;
+      }
+    }
+    else if (name.startsWith('on') && typeof value === 'function') el.addEventListener(name.slice(2).toLowerCase(), value);
+    else if (name === 'value') el.value = value;
+    else if (value === true) el.setAttribute(name, '');
+    else el.setAttribute(name, String(value));
+  }
+  append(el, children);
+  return el;
+}
+
+export function append(parent, children) {
+  for (const child of children.flat(Infinity)) {
+    if (child === undefined || child === null || child === false) continue;
+    parent.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return parent;
+}
+
+export const clear = (el) => {
+  el.replaceChildren();
+  return el;
+};
+
+const svgEl = (tag, attrs) => {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [name, value] of Object.entries(attrs)) el.setAttribute(name, value);
+  return el;
+};
+
+// Simple line icons, drawn on a 24 x 24 grid.
+const ICONS = {
+  back: [['path', { d: 'M15 5l-7 7 7 7' }]],
+  close: [['path', { d: 'M6 6l12 12M18 6L6 18' }]],
+  search: [['circle', { cx: 10.5, cy: 10.5, r: 6 }], ['path', { d: 'M15 15l5 5' }]],
+  eye: [['path', { d: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z' }], ['circle', { cx: 12, cy: 12, r: 3 }]],
+  eyeOff: [['path', { d: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z' }], ['circle', { cx: 12, cy: 12, r: 3 }], ['path', { d: 'M4 4l16 16' }]],
+  edit: [['path', { d: 'M4 20l1-4L16 5l3 3L8 19z' }], ['path', { d: 'M14 7l3 3' }]],
+  trash: [['path', { d: 'M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13' }]],
+  undo: [['path', { d: 'M9 14L4 9l5-5' }], ['path', { d: 'M4 9h10a6 6 0 010 12h-3' }]],
+  share: [['path', { d: 'M12 15V3M8 7l4-4 4 4' }], ['path', { d: 'M5 12v8h14v-8' }]],
+  tune: [['path', { d: 'M4 7h9M19 7h1M4 17h1M11 17h9' }], ['circle', { cx: 16, cy: 7, r: 2.5 }], ['circle', { cx: 8, cy: 17, r: 2.5 }]],
+  mountain: [['path', { d: 'M2 20L9 8l4 6 3-4 6 10z' }]],
+  plus: [['path', { d: 'M12 5v14M5 12h14' }]],
+  file: [['path', { d: 'M6 3h8l4 4v14H6z' }], ['path', { d: 'M14 3v4h4' }]],
+  star: [['path', { d: 'M12 3l2.7 5.7 6.3.8-4.6 4.3 1.2 6.2L12 17l-5.6 3 1.2-6.2L3 9.5l6.3-.8z' }]],
+  link: [['path', { d: 'M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1' }], ['path', { d: 'M14 10a4 4 0 00-5.7 0l-3 3A4 4 0 0011 18.7l1-1' }]],
+};
+
+export function icon(name, size = 24) {
+  const svg = svgEl('svg', { viewBox: '0 0 24 24', width: size, height: size, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' });
+  for (const [tag, attrs] of ICONS[name]) svg.append(svgEl(tag, attrs));
+  return svg;
+}
+
+/** A round icon button. */
+export function iconButton(name, label, onclick, extra = {}) {
+  return h('button', { class: 'icon-btn', type: 'button', 'aria-label': label, title: label, onclick, ...extra }, icon(name));
+}
+
+/** The stars of a climb; with onSelect they can be tapped, and tapping the current rating clears it. */
+export function stars(count, { size = 18, onSelect = null } = {}) {
+  const row = h('div', { class: onSelect ? 'stars stars-input' : 'stars' });
+  for (let i = 1; i <= 5; i++) {
+    const star = icon('star', size);
+    star.classList.add(i <= count ? 'star-on' : 'star-off');
+    if (onSelect) {
+      row.append(h('button', { type: 'button', class: 'star-btn', 'aria-label': `${i} star${i > 1 ? 's' : ''}`, onclick: () => onSelect(i === count ? 0 : i) }, star));
+    } else {
+      row.append(star);
+    }
+  }
+  return row;
+}
+
+// ---- messages and dialogs ----
+
+let toastTimer = null;
+
+/** A short message at the bottom of the screen. With an action, it stays a little longer. */
+export function toast(message, action = null) {
+  document.querySelector('.toast')?.remove();
+  const el = h('div', { class: 'toast', role: 'status' }, h('span', {}, message));
+  if (action) el.append(h('button', { type: 'button', class: 'toast-action', onclick: () => { el.remove(); action.run(); } }, action.label));
+  document.body.append(el);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.remove(), action ? 12000 : 3800);
+}
+
+/** A panel that slides up from the bottom. Returns { close }. */
+export function openSheet(title, content, { onClose = null } = {}) {
+  const backdrop = h('div', { class: 'backdrop' });
+  const panel = h('div', { class: 'sheet', role: 'dialog', 'aria-label': title }, h('div', { class: 'sheet-grip' }), title ? h('h2', {}, title) : null, content);
+  const close = () => {
+    backdrop.remove();
+    panel.remove();
+    document.removeEventListener('keydown', onKey);
+    onClose?.();
+  };
+  const onKey = (event) => event.key === 'Escape' && close();
+  backdrop.addEventListener('click', close);
+  document.addEventListener('keydown', onKey);
+  document.body.append(backdrop, panel);
+  return { close, panel };
+}
+
+/** A question in the middle of the screen. Resolves true for the main button, false otherwise. */
+export function confirmDialog({ title, text, confirmLabel = 'OK', cancelLabel = 'Cancel', danger = false }) {
+  return new Promise((resolve) => {
+    const finish = (answer) => {
+      backdrop.remove();
+      dialog.remove();
+      resolve(answer);
+    };
+    const backdrop = h('div', { class: 'backdrop', onclick: () => finish(false) });
+    const dialog = h(
+      'div',
+      { class: 'dialog', role: 'alertdialog', 'aria-label': title },
+      h('h2', {}, title),
+      text ? h('p', {}, text) : null,
+      h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'text-btn', onclick: () => finish(false) }, cancelLabel), h('button', { type: 'button', class: danger ? 'text-btn danger' : 'text-btn', onclick: () => finish(true) }, confirmLabel)),
+    );
+    document.body.append(backdrop, dialog);
+  });
+}
+
+/** Asks for a line of text. Resolves with the text, or null if cancelled. */
+export function promptDialog({ title, label, value = '', confirmLabel = 'Save', maxLength = 80 }) {
+  return new Promise((resolve) => {
+    const finish = (answer) => {
+      backdrop.remove();
+      dialog.remove();
+      resolve(answer);
+    };
+    const input = h('input', { type: 'text', class: 'field', value, maxlength: maxLength, 'aria-label': label, autocomplete: 'off', onkeydown: (event) => event.key === 'Enter' && finish(input.value) });
+    const backdrop = h('div', { class: 'backdrop', onclick: () => finish(null) });
+    const dialog = h('div', { class: 'dialog', role: 'dialog', 'aria-label': title }, h('h2', {}, title), h('label', { class: 'field-label' }, label, input), h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'text-btn', onclick: () => finish(null) }, 'Cancel'), h('button', { type: 'button', class: 'text-btn', onclick: () => finish(input.value) }, confirmLabel)));
+    document.body.append(backdrop, dialog);
+    input.focus();
+    input.select();
+  });
+}
+
+/** A button that opens the phone's file picker. `onFiles` gets the chosen files. */
+export function filePickerButton(label, { accept, multiple = false, onFiles, className = 'btn' }) {
+  const input = h('input', { type: 'file', accept, multiple, class: 'visually-hidden', tabindex: '-1', onchange: () => {
+    const files = [...input.files];
+    input.value = '';
+    if (files.length) onFiles(files);
+  } });
+  const button = h('button', { type: 'button', class: className, onclick: () => input.click() }, label);
+  return h('span', { class: 'file-picker' }, button, input);
+}
+
+export const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+export const isStandalone = () => window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+
+/** Saves text as a file, using the phone's share sheet where there is one (AirDrop, Messages...), else a download. */
+export async function shareFile(filename, text, title) {
+  const file = new File([text], filename, { type: 'application/json' });
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title });
+      return 'shared';
+    } catch (error) {
+      if (error?.name === 'AbortError') return 'cancelled';
+    }
+  }
+  const url = URL.createObjectURL(file);
+  const link = h('a', { href: url, download: filename });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return 'downloaded';
+}
+
+/** Shares a link with the phone's share sheet, or copies it. */
+export async function shareLink(url, title) {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, url });
+      return 'shared';
+    } catch (error) {
+      if (error?.name === 'AbortError') return 'cancelled';
+    }
+  }
+  return (await copyText(url)) ? 'copied' : 'failed';
+}
+
+export async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = h('textarea', { class: 'visually-hidden', readonly: true }, text);
+    document.body.append(area);
+    area.select();
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch {
+      ok = false;
+    }
+    area.remove();
+    return ok;
+  }
+}

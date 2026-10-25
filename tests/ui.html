@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SprayWall screen tests</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../site/styles.css">
+<style>
+  /* the app's own style stops the page scrolling; this page needs to show its results */
+  html, body { height: auto; overflow: auto; font-size: 14px; }
+  #summary { font: 18px ui-monospace, Consolas, monospace; margin: 12px; }
+  #results { font: 13px/1.5 ui-monospace, Consolas, monospace; margin: 0 12px 12px; }
+  #stage { position: relative; width: 375px; height: 700px; margin: 12px; overflow: hidden; border: 1px solid #444; }
+</style>
+</head>
+<body>
+<div id="summary">running…</div>
+<div id="results"></div>
+<div id="stage"></div>
+<script type="module">
+  import { runAll } from './harness.js';
+  import './ui.test.js';
+  runAll();
+</script>
+</body>
+</html>

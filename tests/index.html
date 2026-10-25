@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SprayWall tests</title>
+<style>
+  body { background: #0e0f12; color: #ecedef; font: 14px/1.5 ui-monospace, Consolas, monospace; margin: 16px; }
+  #summary { font-size: 18px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div id="summary">running…</div>
+<div id="results"></div>
+<script type="module">
+  import { runAll } from './harness.js';
+  import './domain.test.js';
+  import './share.test.js';
+  import './repo.test.js';
+  import './site.test.js';
+  runAll();
+</script>
+</body>
+</html>
