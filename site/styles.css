@@ -187,12 +187,18 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 8px 0; }
 .stage { flex: 1; min-height: 0; }
 .import-preview { height: 46vh; height: 46dvh; border-radius: 14px; overflow: hidden; margin-bottom: 8px; }
 
-.info { background: var(--surface3); padding: 14px 20px calc(14px + var(--safe-bottom)); flex: none; }
-.info-head { display: flex; align-items: center; gap: 14px; }
-.info-grade { font-size: 34px; line-height: 1.1; }
-.info-author { color: var(--muted); font-size: 13px; margin-top: 2px; }
-.info-author:empty { display: none; }
-.info-comment { color: var(--muted); margin-top: 8px; max-height: 96px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* the small strip above a climb: name on the left, grade on the right */
+.bar-count { font-size: 14px; color: var(--muted); padding-left: 4px; }
+.caption { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 16px 8px; background: var(--surface); flex: none; }
+.caption-name { font-size: 15px; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.caption-grade { flex: none; font-size: 13px; font-weight: 600; padding: 1px 10px; border-radius: 10px; background: var(--surface4); }
+
+/* what the info button shows */
+.detail-head { display: flex; align-items: center; gap: 14px; }
+.detail-grade { font-size: 34px; line-height: 1.1; }
+.detail-author { color: var(--muted); font-size: 14px; margin-top: 4px; }
+.detail-comment { margin-top: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.detail-comment.none { color: var(--muted); }
 
 /* ---- the editor's hold types ---- */
 .brush-panel { background: var(--surface3); padding: 8px 12px calc(10px + var(--safe-bottom)); flex: none; }

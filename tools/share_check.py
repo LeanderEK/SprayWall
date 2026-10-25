@@ -71,7 +71,7 @@ def main():
         check(friend.eval("document.querySelector('.import-preview canvas') !== null"), "a preview of the climb on the wall is shown")
         friend.eval("[...document.querySelectorAll('button')].find((b) => b.textContent.startsWith('Import')).click()")
         friend.wait_for("location.hash.startsWith('#/climb/')", what="the imported climb to open")
-        check(friend.eval("document.querySelector('.bar-name').textContent") == "Swoobap", "after Import the climb opens")
+        check(friend.eval("document.querySelector('.caption-name').textContent") == "Swoobap", "after Import the climb opens")
         same = friend.eval(
             """(async () => {
                 const { app } = await import('/site/src/app.js');

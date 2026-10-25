@@ -326,12 +326,11 @@ test('viewer: shows the climb, and the arrow keys and swipes move through the li
   const b = await repo.saveClimb(climbData({ name: 'Bravo' }));
   const c = await repo.saveClimb(climbData({ name: 'Charlie' }));
   const screen = await mountViewer(root, { id: b.id });
-  const title = () => `${root.querySelector('.bar-name').textContent} ${root.querySelector('.bar-sub').textContent}`;
+  const title = () => `${root.querySelector('.caption-name').textContent} ${root.querySelector('.bar-count').textContent}`;
   assert.eq(title(), 'Bravo 2 of 3'); // newest first: Charlie, Bravo, Alpha
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
   await wait(600);
   assert.eq(title(), 'Alpha 3 of 3');
-  assert.eq(root.querySelector('.info-comment').textContent, 'first one');
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
   await wait(600);
   assert.eq(title(), 'Alpha 3 of 3', 'the end of the list stays put');
@@ -351,8 +350,45 @@ test('viewer: a drag with the list filtered only goes through the filtered climb
   await repo.saveClimb(climbData({ name: 'Hard two', grade: 8 }));
   app.query = { ...app.query, minGrade: 7, maxGrade: 17 };
   const screen = await mountViewer(root, { id: hard1.id });
-  assert.ok(root.querySelector('.bar-sub').textContent.endsWith('of 2'));
+  assert.ok(root.querySelector('.bar-count').textContent.endsWith('of 2'));
   screen.destroy();
+});
+
+test('viewer: the name and grade are in a small strip above the wall, and the info button shows the rest', async () => {
+  const { repo, root } = await freshApp();
+  await repo.setMeta('author', 'Zeke'); // a climb takes the name the app has been given for its setter
+  const made = await repo.saveClimb(climbData({ name: 'Swoobap', grade: 6, stars: 4, comment: 'Directional holds.\nSomewhat powerful.' }));
+  await repo.setMeta('author', '');
+  const bare = await repo.saveClimb(climbData({ name: 'Bare', grade: null, stars: 0, comment: '' }));
+  const screen = await mountViewer(root, { id: made.id });
+  const order = [...root.children].map((el) => el.className.split(' ')[0]);
+  assert.ok(order.indexOf('caption') > order.indexOf('bar') && order.indexOf('caption') < order.indexOf('pager'), `the strip sits between the bar and the wall (${order})`);
+  assert.eq(root.querySelector('.caption-name').textContent, 'Swoobap');
+  assert.eq(root.querySelector('.caption-grade').textContent, 'V6');
+  assert.ok(!root.querySelector('.info, .info-comment'), 'there is no big panel under the wall any more');
+  assert.ok(!document.querySelector('.sheet'), 'the details are hidden until the info button is pressed');
+
+  click(root.querySelector('[aria-label="Climb info"]'));
+  const sheet = document.querySelector('.sheet');
+  assert.ok(sheet, 'the info button opens a panel');
+  assert.eq(sheet.querySelector('h2').textContent, 'Swoobap');
+  assert.eq(sheet.querySelector('.detail-grade').textContent, 'V6');
+  assert.eq(sheet.querySelectorAll('.star-on').length, 4);
+  assert.eq(sheet.querySelector('.detail-author').textContent, 'by Zeke');
+  assert.eq(sheet.querySelector('.detail-comment').textContent, 'Directional holds.\nSomewhat powerful.');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  assert.ok(!document.querySelector('.sheet'), 'Escape closes it');
+  screen.destroy();
+  root.replaceChildren();
+
+  const second = await mountViewer(root, { id: bare.id });
+  assert.eq(root.querySelector('.caption-grade').textContent, '—');
+  click(root.querySelector('[aria-label="Climb info"]'));
+  const sheet2 = document.querySelector('.sheet');
+  assert.ok(!sheet2.querySelector('.detail-author'), 'no "by" line without an author');
+  assert.eq(sheet2.querySelector('.detail-comment').textContent, 'No comment.');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  second.destroy();
 });
 
 test('viewer: the eye button switches between dimmed and whole wall', async () => {

@@ -34,16 +34,14 @@ export async function mountViewer(root, { id }) {
   const track = h('div', { class: 'track' }, ...views.map((view) => h('div', { class: 'slide' }, view.el)));
   const pager = h('div', { class: 'pager' }, track);
 
-  const titleName = h('div', { class: 'bar-name' });
-  const titleSub = h('div', { class: 'bar-sub' });
+  const count = h('div', { class: 'bar-count' });
   const eye = iconButton('eye', 'Show the whole wall', toggleWhole);
-  const bar = h('header', { class: 'bar' }, iconButton('back', 'Back', () => nav.back('/')), h('div', { class: 'bar-title' }, titleName, titleSub), h('div', { class: 'bar-actions' }, eye, iconButton('share', 'Share this climb', share), iconButton('edit', 'Edit climb', () => nav.go(`/edit/${current().id}`)), iconButton('trash', 'Delete climb', remove)));
-  const gradeEl = h('div', { class: 'info-grade' });
-  const starsEl = h('div', {});
-  const authorEl = h('div', { class: 'info-author' });
-  const commentEl = h('div', { class: 'info-comment' });
-  const info = h('div', { class: 'info' }, h('div', { class: 'info-head' }, gradeEl, starsEl), authorEl, commentEl);
-  root.append(bar, pager, info);
+  const bar = h('header', { class: 'bar' }, iconButton('back', 'Back', () => nav.back('/')), h('div', { class: 'bar-title' }, count), h('div', { class: 'bar-actions' }, eye, iconButton('info', 'Climb info', showDetails), iconButton('share', 'Share this climb', share), iconButton('edit', 'Edit climb', () => nav.go(`/edit/${current().id}`)), iconButton('trash', 'Delete climb', remove)));
+  // The name and grade sit in a small strip above the wall; the rest (stars, who set it, the comment) is behind the info button.
+  const nameEl = h('div', { class: 'caption-name' });
+  const gradeEl = h('div', { class: 'caption-grade' });
+  const caption = h('div', { class: 'caption' }, nameEl, gradeEl);
+  root.append(bar, caption, pager);
 
   function setTrack(dx, animate) {
     track.style.transition = animate ? 'transform 0.22s ease-out' : 'none';
@@ -63,14 +61,25 @@ export async function mountViewer(root, { id }) {
 
   function showInfo() {
     const climb = current();
-    titleName.textContent = climb.name;
-    titleSub.textContent = ids.length > 1 ? `${index + 1} of ${ids.length}` : '';
+    nameEl.textContent = climb.name;
     gradeEl.textContent = gradeLabel(climb.grade);
-    starsEl.replaceChildren(stars(climb.stars, { size: 22 }));
-    authorEl.textContent = climb.author ? `by ${climb.author}` : '';
-    commentEl.textContent = climb.comment || '';
-    commentEl.hidden = !climb.comment;
+    count.textContent = ids.length > 1 ? `${index + 1} of ${ids.length}` : '';
     eye.setAttribute('aria-label', showWhole ? 'Dim the wall again' : 'Show the whole wall');
+  }
+
+  /** The info button: grade, stars, who set it and the comment, for the climb on screen. */
+  function showDetails() {
+    const climb = current();
+    openSheet(
+      climb.name,
+      h(
+        'div',
+        { class: 'sheet-body' },
+        h('div', { class: 'detail-head' }, h('div', { class: 'detail-grade' }, gradeLabel(climb.grade)), stars(climb.stars, { size: 22 })),
+        climb.author ? h('div', { class: 'detail-author' }, `by ${climb.author}`) : null,
+        h('div', { class: climb.comment ? 'detail-comment' : 'detail-comment none' }, climb.comment || 'No comment.'),
+      ),
+    );
   }
 
   function settle(direction) {

@@ -54,6 +54,7 @@ const ICONS = {
   edit: [['path', { d: 'M4 20l1-4L16 5l3 3L8 19z' }], ['path', { d: 'M14 7l3 3' }]],
   trash: [['path', { d: 'M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13' }]],
   undo: [['path', { d: 'M9 14L4 9l5-5' }], ['path', { d: 'M4 9h10a6 6 0 010 12h-3' }]],
+  info: [['circle', { cx: 12, cy: 12, r: 9 }], ['path', { d: 'M12 11v6M12 7.5h.01' }]],
   share: [['path', { d: 'M12 15V3M8 7l4-4 4 4' }], ['path', { d: 'M5 12v8h14v-8' }]],
   tune: [['path', { d: 'M4 7h9M19 7h1M4 17h1M11 17h9' }], ['circle', { cx: 16, cy: 7, r: 2.5 }], ['circle', { cx: 8, cy: 17, r: 2.5 }]],
   mountain: [['path', { d: 'M2 20L9 8l4 6 3-4 6 10z' }]],
