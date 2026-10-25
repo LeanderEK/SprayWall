@@ -1,4 +1,5 @@
 import { app } from '../app.js';
+import { askForAccount } from './account.js';
 import { SyncError, showBoardCode } from '../domain/sync.js';
 import { confirmDialog, copyText, h, openSheet, shareText, toast } from './dom.js';
 
@@ -30,7 +31,7 @@ export async function openSyncSheet() {
   let sheet;
   let busy = false;
   let problem = '';
-  const stopListening = sync.onState((key) => key === wall.key && render());
+  const stopListening = sync.onState((key) => (key === wall.key || key === null) && render());
 
   const run = async (work) => {
     if (busy) return;
@@ -50,9 +51,15 @@ export async function openSyncSheet() {
   async function render() {
     if (!body.isConnected && sheet) return; // closed
     const setup = await repo.getSyncSetup(wall.key);
+    const account = sync.available ? await sync.account() : null;
     const pieces = [];
     if (!sync.available) {
       pieces.push(h('p', {}, 'Sync is not switched on in this copy of SprayWall yet.'));
+    } else if (!account) {
+      pieces.push(
+        h('p', {}, 'Boards need your account, so that every climb has its maker\'s username on it and nobody can pass as somebody else. Your username is unique and works on any phone.'),
+        h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn primary', onclick: async () => { await askForAccount({ sync, canSkip: true }); render(); } }, 'Sign in or create account')),
+      );
     } else if (!setup) {
       const codeInput = h('input', { class: 'field', type: 'text', placeholder: 'k7f2-9xqm-c4ta-p8dn', 'aria-label': 'Board code', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false' });
       pieces.push(

@@ -198,6 +198,8 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 8px 0; }
 .caption-upload:empty { display: none; }
 .pill-btn { border: 1px solid var(--outline); background: transparent; color: var(--text); font-size: 13px; font-weight: 600; padding: 1px 12px; border-radius: 10px; }
 .pill-btn:active { background: var(--surface4); }
+.pill-btn.on { background: var(--ok); border-color: var(--ok); color: #0b1f10; }
+.caption-upload { gap: 6px; }
 .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 8px; background: var(--surface4); color: var(--muted); }
 .tag.draft { color: var(--text); }
 .row-author .badge { margin-left: 6px; padding: 0 6px; }
@@ -205,6 +207,11 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 8px 0; }
 .detail-rate { margin-top: 12px; }
 .detail-label { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
 .username { font-size: 18px; font-weight: 600; }
+
+/* the account dialog */
+.dialog.account { max-height: 90vh; max-height: 90dvh; overflow-y: auto; }
+.dialog.account .field { margin: 0 0 10px; }
+.dialog-actions.spread { flex-wrap: wrap; justify-content: space-between; align-items: center; }
 
 /* the sync sheet */
 .board-code-label { font-size: 13px; color: var(--muted); margin-top: 4px; }

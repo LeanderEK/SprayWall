@@ -7,10 +7,13 @@ After the first visit **everything is saved on the device and it works with no s
 Climbs can be shared as a **link** or a **file**, and (once a Firebase project is set up, see "Shared boards" below) uploaded
 to a **shared board** that friends' phones receive automatically.
 
-Every user chooses a **username** the first time the app opens. It goes on every climb they make.
+Every user has an **account**: a unique username (3 to 20 lowercase letters, digits, dashes or underscores) and a password,
+made the first time the app opens (with a Firebase project set up; without one the app just asks for a name). Signing in
+with them works on any phone. The username goes on every climb the user makes.
 A new climb is a **draft**: only on that phone, and it can be edited and deleted. Pressing **Upload** on it puts it on
-the shared board, after which **nobody can edit or delete it** (the database's rules allow only adding). **Star ratings are
-private**: each person rates climbs on their own phone and the ratings are never shared.
+the shared board, after which **nobody can edit or delete it** (the database's rules allow only adding), and the database
+only accepts a climb whose author is the account that uploads it. **Star ratings** and **"sent" marks** (completed climbs)
+are private: each person keeps their own on their own phone and they are never shared.
 
 Your Android app is separate and untouched. The two apps do not talk to each other, but the same climbs can be moved
 between them by file (see "Moving your Android climbs").
@@ -105,8 +108,16 @@ upload their own.
 * **Your climbs**: the Filters panel has **Show: All climbs / My climbs / My drafts**. A small "Draft" tag marks drafts.
 * **Ratings**: tap the stars in a climb's info panel. They stay on your phone. The list's "Your stars" filter and the
   "Top rated" sort use your own ratings.
-* **Username**: chosen once. It can be changed until the first of your climbs is uploaded; after that it is locked. Names are
-  not checked against anyone: the board code is the real gate, so only give it to friends.
+* **Sent (completed)**: the **Mark sent** button above a climb turns it into a green **✓ Sent**; tap again to undo. The list
+  shows ✓ Sent, and Filters has **Sent: Any / Sent / Not sent yet**. Like ratings, it is only on your phone: not in files,
+  not on the board, not seen by anyone else, and it does not follow your account to another phone.
+* **Accounts**: the username is unique (Firebase refuses a second account with the same one) and the same on every phone you
+  sign in on. Share icon → shows who is signed in and has **Sign out**. Signed out, everything local still works, but you
+  cannot upload or receive climbs until you sign in again. **There is no password reset**: an account is a username and a
+  password and no real email address (Firebase is given `<username>@spraywall.example.com`, which nobody can receive mail at).
+  If a password is lost, the project owner deletes that account in the Firebase console (Authentication → Users) and the
+  username can be made again; climbs already uploaded under that name stay and count as yours again.
+* **Drafts do not follow your account**: they live on the phone they were made on. Uploading, or Share as a file, moves them.
 * **The board code** is 16 random letters and digits (`k7f2-9xqm-c4ta-p8dn`); nobody can list or guess boards. It is shown
   under share icon → Sync with friends. Stopping on a phone keeps all its climbs.
 * A board belongs to one wall (its key, `home-wall`); a phone can only join a board for a wall it has.
@@ -129,12 +140,13 @@ friend group stays far below them: joining a board reads each climb once, then a
 2. **Firestore**: Databases & Storage (or Build) → Firestore → Create database → Standard edition → pick a location near
    you → **Production mode** → Create.
 3. **Rules**: Firestore → Rules tab → replace everything with the contents of `firebase/firestore.rules` → Publish.
-4. **Sign-in**: Authentication → Get started → Sign-in method → **Anonymous** → Enable → Save. (Nobody types a password;
-   this only gives each phone a token the database asks for.)
+4. **Sign-in**: Authentication → Get started → Sign-in method → **Email/Password** → switch on the first toggle
+   (**Enable**, not "Email link") → Save. This is what usernames and passwords use. (Anonymous is not needed any more.)
 5. **The app's two values**: Project settings (gear) → General → Your apps → the web icon `</>` → give it a nickname →
    Register app (leave Hosting off). The config shows `apiKey` and `projectId`.
 6. Put them in `site/src/sync-config.js` (replace `null`), run the tests, push. The share icon then has "Sync with friends".
-7. Prove it against the real project: `tools\.venv\Scripts\python.exe tools\firebase_check.py` (leaves one test board).
+7. Prove it against the real project: `tools\.venv\Scripts\python.exe tools\firebase_check.py` (it makes two test accounts
+   with random names and leaves them, a test board and a few climbs behind; delete the accounts in Authentication → Users).
 
 If the rules in `firebase/firestore.rules` ever change, paste the new ones into the console again (step 3).
 

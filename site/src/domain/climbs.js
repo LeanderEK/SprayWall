@@ -3,6 +3,7 @@ import { parseMarks } from './holds.js';
 export const MAX_GRADE = 17;
 export const MAX_STARS = 5;
 export const MAX_WALL_NAME = 40;
+export const MIN_USERNAME = 3;
 export const MAX_USERNAME = 20;
 
 export const gradeLabel = (grade) => (grade === null || grade === undefined ? '—' : `V${grade}`);
@@ -22,13 +23,16 @@ export function cleanWallName(text) {
 }
 
 /**
- * What a person typing a username gets: spaces tidied, 2 to 20 letters, digits, spaces, dots, dashes or underscores,
- * starting with a letter or digit. Null if it will not do.
+ * What a person typing a username gets: tidied and made lowercase, 3 to 20 letters, digits, dashes or underscores, starting
+ * with a letter or digit. Null if it will not do. (A username is also the start of the account's email-style sign-in name,
+ * which is why it is this plain.)
  */
 export function cleanUsername(text) {
-  const clean = String(text ?? '').replace(/\s+/g, ' ').trim();
-  return /^[\p{L}\p{N}][\p{L}\p{N} ._-]{1,19}$/u.test(clean) ? clean : null;
+  const clean = String(text ?? '').trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9_-]{2,19}$/.test(clean) ? clean : null;
 }
+
+export const USERNAME_HELP = 'Use 3 to 20 letters, digits, dashes or underscores.';
 
 /** Two usernames are the same person's, whatever the capitals. */
 export const sameName = (a, b) => Boolean(a) && Boolean(b) && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
@@ -55,13 +59,21 @@ export const SCOPES = [
   ['drafts', 'My drafts'],
 ];
 
-export const defaultQuery = () => ({ text: '', minGrade: 0, maxGrade: MAX_GRADE, minStars: 0, scope: 'all', sort: 'newest' });
+// Whether you have sent (completed) a climb. Like star ratings, that is yours alone and stays on your phone.
+export const SENT_FILTERS = [
+  ['all', 'Any'],
+  ['sent', 'Sent'],
+  ['todo', 'Not sent yet'],
+];
+
+export const defaultQuery = () => ({ text: '', minGrade: 0, maxGrade: MAX_GRADE, minStars: 0, scope: 'all', sent: 'all', sort: 'newest' });
 export const gradeFiltered = (query) => query.minGrade > 0 || query.maxGrade < MAX_GRADE;
-export const filterCount = (query) => (gradeFiltered(query) ? 1 : 0) + (query.minStars > 0 ? 1 : 0) + (query.scope && query.scope !== 'all' ? 1 : 0);
+export const filterCount = (query) => (gradeFiltered(query) ? 1 : 0) + (query.minStars > 0 ? 1 : 0) + (query.scope && query.scope !== 'all' ? 1 : 0) + (query.sent && query.sent !== 'all' ? 1 : 0);
 
 // A climb is { id, wallKey, name, grade (0-17 or null), comment, author, holds (text), createdAt, updatedAt } and, once it is
-// on a shared board, publishedAt. The star rating is not part of a climb: each phone keeps its own (see Repo.getRatings), and
-// the list and the viewer put it on the climbs they show as `stars` (0-5).
+// on a shared board, publishedAt. Your star rating and whether you have sent it are not part of a climb: each phone keeps its
+// own (see Repo.getRatings and Repo.getSent), and the list and the viewer put them on the climbs they show as `stars` (0-5)
+// and `sent` (when you sent it, or 0).
 
 export const marksOf = (climb) => parseMarks(climb.holds);
 
@@ -76,7 +88,8 @@ export function applyQuery(climbs, query, me = '') {
     const matchesGrade =
       !gradeFiltered(query) || (climb.grade !== null && climb.grade >= query.minGrade && climb.grade <= query.maxGrade);
     const matchesScope = !query.scope || query.scope === 'all' || (isMine(climb, me) && (query.scope === 'mine' || !isUploaded(climb)));
-    return matchesText && matchesGrade && matchesScope && (climb.stars || 0) >= query.minStars;
+    const matchesSent = !query.sent || query.sent === 'all' || (query.sent === 'sent') === Boolean(climb.sent);
+    return matchesText && matchesGrade && matchesScope && matchesSent && (climb.stars || 0) >= query.minStars;
   });
   const newestFirst = (a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
   const by = {

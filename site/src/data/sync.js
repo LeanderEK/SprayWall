@@ -1,5 +1,5 @@
-import { isMine, isUploaded } from '../domain/climbs.js';
-import { SyncError, cleanRemote, makeBoardCode, parseBoardCode, stampValue, toRecord } from '../domain/sync.js';
+import { USERNAME_HELP, cleanUsername, isUploaded, sameName } from '../domain/climbs.js';
+import { MIN_PASSWORD, SyncError, cleanPassword, cleanRemote, makeBoardCode, parseBoardCode, stampValue, toRecord } from '../domain/sync.js';
 
 // A wall's shared board. Everything works on the phone first; the board is only visited when there is a connection.
 //   - Fetching: climbs other people (or your other phones) have uploaded since the last visit are added here. Uploaded
@@ -57,6 +57,60 @@ export class SyncService {
 
   #need() {
     if (!this.remote) throw new SyncError('setup', 'Sync is not switched on in this copy of the app.');
+  }
+
+  // ---- the account ----
+
+  /** { username } of the account signed in on this phone, or null (also when sync is not switched on). */
+  async account() {
+    return this.remote ? this.remote.account() : null;
+  }
+
+  /**
+   * Makes a new account with this username (unique: it fails if someone has it) and signs in. The drafts and unnamed climbs on
+   * this phone become the new username's. Returns the username.
+   */
+  async signUp(name, password) {
+    this.#need();
+    const { username, secret } = this.#credentials(name, password);
+    await this.remote.signUp(username, secret);
+    await this.repo.setUsername(username, { force: true, renameDrafts: true });
+    this.#changed();
+    return username;
+  }
+
+  /** Signs in to an existing account, on this or any phone. Returns the username. */
+  async signIn(name, password) {
+    this.#need();
+    const { username, secret } = this.#credentials(name, password);
+    await this.remote.signIn(username, secret);
+    await this.repo.setUsername(username, { force: true, renameDrafts: false });
+    this.#changed();
+    this.#recover();
+    return username;
+  }
+
+  /** Signs out on this phone. Its climbs stay; uploading and receiving climbs wait for the next sign-in. */
+  async signOut() {
+    await this.remote?.signOut();
+    this.#changed();
+  }
+
+  #credentials(name, password) {
+    const username = cleanUsername(name);
+    if (username === null) throw new SyncError('username', USERNAME_HELP);
+    const secret = cleanPassword(password);
+    if (secret === null) throw new SyncError('password', `The password needs at least ${MIN_PASSWORD} characters.`);
+    return { username, secret };
+  }
+
+  #changed() {
+    for (const listener of this.listeners) listener(null);
+  }
+
+  /** After signing in again, errors that were only about being signed out can go. */
+  #recover() {
+    for (const [wallKey, state] of this.states) if (state.kind === 'signin') this.states.set(wallKey, { status: 'idle', message: '', at: state.at });
   }
 
   // ---- starting and stopping ----
@@ -160,7 +214,7 @@ export class SyncService {
     const known = error instanceof SyncError ? error : new SyncError('server', 'Something went wrong while syncing.');
     if (!(error instanceof SyncError)) console.error(error);
     if (known.kind === 'offline') this.#setState(wallKey, { status: 'offline', message: 'Offline. New climbs arrive when you are back online.' });
-    else this.#setState(wallKey, { status: 'error', message: known.message });
+    else this.#setState(wallKey, { status: 'error', kind: known.kind, message: known.message });
     return known;
   }
 
@@ -179,9 +233,9 @@ export class SyncService {
     const climb = await this.repo.getClimb(climbId);
     if (!climb) throw new SyncError('mine', 'That climb is not on this phone any more.');
     if (isUploaded(climb)) throw new SyncError('mine', 'That climb is already uploaded.');
-    const me = await this.repo.authorName();
-    if (!me) throw new SyncError('username', 'Choose a username first.');
-    if (!isMine(climb, me)) throw new SyncError('mine', 'Only climbs you made can be uploaded.');
+    const account = await this.remote.account();
+    if (!account) throw new SyncError('signin', 'Sign in to your account to upload.');
+    if (!sameName(climb.author, account.username)) throw new SyncError('mine', `Only climbs made under your username (${account.username}) can be uploaded.`);
     const setup = await this.repo.getSyncSetup(climb.wallKey);
     if (!setup) throw new SyncError('board', 'Start or join a board for this wall first (share button, Sync with friends).');
     try {

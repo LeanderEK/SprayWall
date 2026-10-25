@@ -41,7 +41,7 @@ def main():
     you = Browser(port=9334)
     friend = Browser(port=9335)
     stranger = Browser(port=9336)
-    base = "http://localhost:8094/site/?nosw=1"
+    base = "http://localhost:8094/site/?nosw=1&nosync=1"
     try:
         for phone in (you, friend, stranger):
             phone.go(base)
@@ -64,7 +64,7 @@ def main():
         )
         print(f"       the link is {len(link)} characters long")
         check(len(link) < 800, "the link is short enough for any messaging app")
-        local_link = link.replace("https://example.github.io/spraywall/", "http://localhost:8094/site/?nosw=1")
+        local_link = link.replace("https://example.github.io/spraywall/", "http://localhost:8094/site/?nosw=1&nosync=1")
         friend.go(local_link)
         friend.wait_for("document.querySelector('.bar-name') && document.querySelector('.bar-name').textContent === 'Import climbs'", what="the review screen")
         check(friend.eval("document.querySelector('.row-name').textContent") == "Swoobap", "the friend sees the climb, named Swoobap")

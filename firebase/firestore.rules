@@ -2,24 +2,31 @@ rules_version = '2';
 
 // The rules of SprayWall's shared database. Paste all of this into Firebase console -> Firestore Database -> Rules -> Publish.
 //
+// Everyone signs in with an account: a username and a password. Firebase wants an email address, so the username is turned
+// into <username>@spraywall.example.com (nobody can ever receive mail there; see domain/sync.js). Firebase keeps the
+// addresses unique, so usernames are unique.
+//
 // The database holds boards. A board is found only by its code (16 random letters and digits, so nobody can guess one),
-// and boards cannot be listed. Whoever knows a board's code may read its climbs and ADD new ones.
+// and boards cannot be listed. Anyone signed in who knows a board's code may read its climbs and ADD climbs under their
+// OWN username (the `author` of a climb has to match the account that adds it).
 // Nobody can change or delete a climb once it is there (there is no update or delete rule at all), and nobody can
 // change or delete a board. Every climb is checked for the right fields, types and sizes, and its `serverTime` has
 // to be the database's own clock. The climb's id is the name of its document.
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Signed in with a username and password. (An anonymous sign-in has no email, so it does not count.)
     function signedIn() {
-      return request.auth != null;
+      return request.auth != null && request.auth.token.email != null;
     }
 
     function validClimb(d, id) {
       return d.keys().hasOnly(['name', 'grade', 'comment', 'author', 'holds', 'createdAt', 'serverTime'])
         && d.keys().hasAll(['name', 'author', 'holds', 'createdAt', 'serverTime'])
         && id.matches('[A-Za-z0-9_-]{8,64}')
+        && d.author is string && d.author.matches('[a-z0-9][a-z0-9_-]{2,19}')
+        && request.auth.token.email == d.author + '@spraywall.example.com'
         && d.name is string && d.name.size() >= 1 && d.name.size() <= 80
-        && d.author is string && d.author.size() >= 2 && d.author.size() <= 40
         && d.holds is string && d.holds.size() <= 20000
         && d.holds.matches('[0-9]+:(start|hand|foot|finish)(,[0-9]+:(start|hand|foot|finish))*')
         && d.createdAt is int

@@ -4,6 +4,7 @@ import { SyncError } from '../domain/sync.js';
 import { confirmDialog, h, icon, iconButton, openSheet, stars, toast } from './dom.js';
 import { appBar } from './list.js';
 import { copyClimbLink, shareClimbFile, shareClimbLink } from './sharing.js';
+import { askForAccount } from './account.js';
 import { openSyncSheet } from './syncsheet.js';
 import { PAINT, WallView } from './wallview.js';
 
@@ -16,10 +17,11 @@ export async function mountViewer(root, { id }) {
     root.append(appBar({ title: 'Climb', back: () => nav.back('/') }), h('div', { class: 'empty' }, h('h2', {}, 'This climb is not here any more'), h('button', { type: 'button', class: 'btn', onclick: () => nav.replace('/') }, 'Back to the list')));
     return {};
   }
-  // Each climb carries your own star rating as `stars` (ratings are kept on this phone only).
+  // Each climb carries your own star rating as `stars` and when you sent it as `sent` (both are kept on this phone only).
   const ratings = await repo.getRatings();
+  const sentMarks = await repo.getSent();
   const me = await repo.authorName();
-  const all = (await repo.listClimbs(wall.key)).map((climb) => ({ ...climb, stars: ratings.get(climb.id) || 0 }));
+  const all = (await repo.listClimbs(wall.key)).map((climb) => ({ ...climb, stars: ratings.get(climb.id) || 0, sent: sentMarks.get(climb.id) || 0 }));
   const byId = new Map(all.map((climb) => [climb.id, climb]));
   const ids = browseIds(all, app.query, id, me);
   const picture = await wallPicture(wall);
@@ -48,6 +50,7 @@ export async function mountViewer(root, { id }) {
   // The name and grade sit in a small strip above the wall; the rest (your stars, who set it, the comment) is behind the info button.
   const nameEl = h('div', { class: 'caption-name' });
   const gradeEl = h('div', { class: 'caption-grade' });
+  const sentButton = h('button', { type: 'button', class: 'pill-btn', onclick: toggleSent });
   const uploadSlot = h('div', { class: 'caption-upload' });
   const caption = h('div', { class: 'caption' }, nameEl, uploadSlot, gradeEl);
   root.append(bar, caption, pager);
@@ -75,7 +78,10 @@ export async function mountViewer(root, { id }) {
     const uploaded = isUploaded(climb);
     editButton.hidden = uploaded;
     deleteButton.hidden = uploaded;
-    uploadSlot.replaceChildren(uploaded ? h('span', { class: 'tag' }, 'Uploaded') : isMine(climb, me) ? h('button', { type: 'button', class: 'pill-btn', onclick: uploadCurrent }, 'Upload') : null);
+    sentButton.textContent = climb.sent ? '✓ Sent' : 'Mark sent';
+    sentButton.classList.toggle('on', Boolean(climb.sent));
+    sentButton.setAttribute('aria-pressed', String(Boolean(climb.sent)));
+    uploadSlot.replaceChildren(sentButton, uploaded ? h('span', { class: 'tag' }, 'Uploaded') : isMine(climb, me) ? h('button', { type: 'button', class: 'pill-btn', onclick: uploadCurrent }, 'Upload') : null);
     count.textContent = ids.length > 1 ? `${index + 1} of ${ids.length}` : '';
     eye.setAttribute('aria-label', showWhole ? 'Dim the wall again' : 'Show the whole wall');
   }
@@ -93,15 +99,29 @@ export async function mountViewer(root, { id }) {
         { class: 'sheet-body' },
         h('div', { class: 'detail-head' }, h('div', { class: 'detail-grade' }, gradeLabel(climb.grade)), h('div', { class: 'detail-by' }, climb.author ? `by ${climb.author}` : '', isUploaded(climb) ? h('span', { class: 'tag' }, 'Uploaded') : isMine(climb, me) ? h('span', { class: 'tag draft' }, 'Draft') : null)),
         h('div', { class: 'detail-rate' }, h('div', { class: 'detail-label' }, 'Your rating (only on this phone)'), ratingBox),
+        h('div', { class: 'detail-rate' }, h('div', { class: 'detail-label' }, 'Sent (only on this phone)'), h('div', {}, climb.sent ? `You sent it on ${new Date(climb.sent).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}.` : 'Not sent yet.')),
         h('div', { class: climb.comment ? 'detail-comment' : 'detail-comment none' }, climb.comment || 'No comment.'),
       ),
     );
+  }
+
+  /** Marks the climb on screen as sent (completed), or takes the mark away. Only you see it: it stays on this phone. */
+  async function toggleSent() {
+    const climb = current();
+    climb.sent = await repo.setSent(climb.id, !climb.sent);
+    showInfo();
+    toast(climb.sent ? 'Marked as sent. Well done!' : 'Marked as not sent.');
   }
 
   /** Uploads the draft on screen to the shared board, after asking: it cannot be changed or deleted afterwards. */
   async function uploadCurrent() {
     const climb = current();
     if (!app.sync?.available) return toast('Uploading needs a shared board, which is not switched on in this app yet.');
+    if (!(await app.sync.account())) {
+      toast('Sign in to your account to upload.');
+      const done = await askForAccount({ sync: app.sync, mode: 'signin', canSkip: true });
+      if (!done) return;
+    }
     if (!(await repo.getSyncSetup(climb.wallKey))) {
       toast('Start or join a board for this wall first.');
       return openSyncSheet();

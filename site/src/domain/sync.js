@@ -11,7 +11,9 @@ import { cleanClimb } from './share.js';
 /**
  * Why a sync step failed. `kind` is one of: offline, denied, notfound, quota, server, setup (the Firebase project is not
  * ready), code (not a board code), wall (the board is for another wall), exists, mine (not a climb you can upload),
- * board (no board for the wall yet), username (none chosen yet).
+ * board (no board for the wall yet), username (not a usable username), password (not a usable password),
+ * signin (not signed in, or signed out), taken (username already has an account), credentials (wrong username or
+ * password), weak (password refused as too weak), disabled (account switched off), tooMany (too many tries, wait).
  */
 export class SyncError extends Error {
   constructor(kind, message) {
@@ -19,6 +21,23 @@ export class SyncError extends Error {
     this.kind = kind;
   }
 }
+
+// ---- accounts ----
+//
+// An account is a username and a password. Firebase's sign-in wants an email address, so the username is turned into one
+// that nobody can ever receive mail at (the part before the @ is the username, the part after is below). Firebase keeps
+// the addresses unique, which makes the usernames unique, and the database's rules compare the address in your sign-in
+// with the author of each climb you upload, so nobody can upload under another name. No email is ever sent, so a lost
+// password cannot be reset by email: the project owner deletes the account in the Firebase console and the name is free again.
+
+export const AUTH_DOMAIN = 'spraywall.example.com';
+export const MIN_PASSWORD = 8;
+export const emailFor = (username) => `${username}@${AUTH_DOMAIN}`;
+
+/** The password as typed, or null if it is too short (Firebase needs 6; 8 is asked for). Passwords are never changed or trimmed. */
+export const cleanPassword = (text) => (typeof text === 'string' && text.length >= MIN_PASSWORD && text.length <= 128 ? text : null);
+
+// ---- board codes ----
 
 // Letters and digits that cannot be mistaken for each other (no i, l, o, 0 or 1): 31 of them.
 export const BOARD_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';

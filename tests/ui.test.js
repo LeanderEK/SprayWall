@@ -11,6 +11,7 @@ import { mountEditor } from '../site/src/ui/editor.js';
 import { mountImporter } from '../site/src/ui/importer.js';
 import { mountList } from '../site/src/ui/list.js';
 import { openSharingSheet } from '../site/src/ui/sharing.js';
+import { askForAccount } from '../site/src/ui/account.js';
 import { askForUsername } from '../site/src/ui/username.js';
 import { openSyncSheet } from '../site/src/ui/syncsheet.js';
 import { mountViewer } from '../site/src/ui/viewer.js';
@@ -52,13 +53,14 @@ async function testWall() {
 async function freshApp({ withWall = true } = {}) {
   let clock = 1_000_000; // each save a second later, so "newest first" has an answer
   const repo = new Repo(new MemoryStore(), () => (clock += 1000));
-  await repo.setUsername('Tester');
+  await repo.setUsername('tester');
   const wall = await testWall();
   if (withWall) await repo.saveWall(wall);
   const visits = [];
   app.repo = repo;
   app.query = { text: '', minGrade: 0, maxGrade: 17, minStars: 0, scope: 'all', sort: 'newest' };
   app.pending = null;
+  app.sync = null;
   app.leaveGuard = null;
   app.nav = { go: (path) => visits.push(['go', path]), replace: (path) => visits.push(['replace', path]), back: (path) => visits.push(['back', path]) };
   document.querySelectorAll('.sheet, .dialog, .backdrop, .toast').forEach((el) => el.remove());
@@ -239,7 +241,7 @@ test('editor: choose a type, tap holds, undo, erase, save: the climb is stored w
   await wait(200);
   const [saved] = await repo.listClimbs('test-wall');
   assert.eq(saved.holds, '1:start,3:hand,9:foot');
-  assert.eq([saved.name, saved.grade, saved.comment, 'stars' in saved, saved.author, saved.publishedAt], ['Corner crimp', 6, 'Stay low', false, 'Tester', undefined]);
+  assert.eq([saved.name, saved.grade, saved.comment, 'stars' in saved, saved.author, saved.publishedAt], ['Corner crimp', 6, 'Stay low', false, 'tester', undefined]);
   assert.eq(visits.at(-1), ['replace', `/climb/${saved.id}`]);
   assert.ok(!document.querySelector('.sheet'), 'the sheet closes');
   screen.destroy();
@@ -263,7 +265,7 @@ test('editor: the eye button hides and shows the outlines; Clear all empties the
 
 test('editor: changing an existing climb keeps it one climb and keeps its setter', async () => {
   const { repo, root, visits } = await freshApp();
-  await repo.setMeta('author', 'Leander');
+  await repo.setMeta('author', 'leander');
   const made = await repo.saveClimb(climbData());
   await mountEditor(root, { id: made.id });
   const view = root.querySelector('.wallview').wallView;
@@ -279,7 +281,7 @@ test('editor: changing an existing climb keeps it one climb and keeps its setter
   const all = await repo.listClimbs('test-wall');
   assert.eq(all.length, 1);
   assert.eq(all[0].holds, '1:start,5:hand,8:hand');
-  assert.eq(all[0].author, 'Leander');
+  assert.eq(all[0].author, 'leander');
   assert.eq(visits.at(-1), ['back', `/climb/${made.id}`]);
 });
 
@@ -363,7 +365,7 @@ test('viewer: a drag with the list filtered only goes through the filtered climb
 
 test('viewer: the name and grade are in a small strip above the wall, and the info button shows the rest and lets you rate', async () => {
   const { repo, root } = await freshApp();
-  await repo.setUsername('Zeke');
+  await repo.setUsername('zeke');
   const made = await repo.saveClimb(climbData({ name: 'Swoobap', grade: 6, comment: 'Directional holds.\nSomewhat powerful.' }));
   const bare = await repo.saveClimb(climbData({ name: 'Bare', grade: null, comment: '' }));
   const screen = await mountViewer(root, { id: made.id });
@@ -379,7 +381,7 @@ test('viewer: the name and grade are in a small strip above the wall, and the in
   assert.ok(sheet, 'the info button opens a panel');
   assert.eq(sheet.querySelector('h2').textContent, 'Swoobap');
   assert.eq(sheet.querySelector('.detail-grade').textContent, 'V6');
-  assert.ok(sheet.querySelector('.detail-by').textContent.includes('by Zeke') && sheet.querySelector('.detail-by .tag').textContent === 'Draft');
+  assert.ok(sheet.querySelector('.detail-by').textContent.includes('by zeke') && sheet.querySelector('.detail-by .tag').textContent === 'Draft');
   assert.eq(sheet.querySelector('.detail-comment').textContent, 'Directional holds.\nSomewhat powerful.');
   assert.eq(sheet.querySelectorAll('.star-on').length, 0, 'you have not rated it yet');
   click(sheet.querySelectorAll('.star-btn')[3]); // four stars
@@ -417,7 +419,7 @@ test('viewer: the eye button switches between dimmed and whole wall', async () =
 
 // ---- importing ----
 
-const wire = (id, over = {}) => ({ id, name: 'Shared', grade: 4, stars: 3, comment: 'note', author: 'Zeke', holds: '1:start,2:hand', createdAt: 5000, updatedAt: 9000, ...over });
+const wire = (id, over = {}) => ({ id, name: 'Shared', grade: 4, stars: 3, comment: 'note', author: 'zeke', holds: '1:start,2:hand', createdAt: 5000, updatedAt: 9000, ...over });
 const shareOf = (climbs, key = 'test-wall') => parseShare({ format: 'spraywall-climbs', version: 1, wall: { key, name: 'Test wall' }, climbs }, 1_900_000_000_000);
 
 test('import review: shows what is new, and Import saves it', async () => {
@@ -499,10 +501,11 @@ test('walls: the list shows the wall, rename works from the dialog, and delete a
 // ---- sync ----
 
 /** The app's sync, talking to a stand-in for Firebase. */
-function syncWith(repo, backend = new FakeFirebase()) {
+async function syncWith(repo, backend = new FakeFirebase()) {
   const tokens = { load: () => repo.getMeta('syncAuth'), save: (auth) => repo.setMetaQuietly('syncAuth', auth) };
   const remote = new FirestoreRemote({ config: { apiKey: backend.apiKey, projectId: backend.projectId }, tokens, fetchImpl: backend.fetch, now: () => backend.clock.now });
   app.sync = new SyncService({ repo, remote, now: () => backend.clock.now });
+  await app.sync.signUp('tester', 'tester-password');
   return backend;
 }
 const topSheet = () => [...document.querySelectorAll('.sheet')].at(-1);
@@ -521,7 +524,7 @@ test('sync sheet: with no Firebase project the share sheet does not mention sync
 
 test('sync sheet: starting a board shows its code and how it went, and stopping goes back to the start', async () => {
   const { repo } = await freshApp();
-  const backend = syncWith(repo);
+  const backend = await syncWith(repo);
   await repo.saveClimb(climbData({ name: 'Sent along' }));
   await openSharingSheet();
   assert.ok(topSheet().textContent.includes('Sync with friends'));
@@ -550,7 +553,7 @@ test('sync sheet: starting a board shows its code and how it went, and stopping 
 
 test('sync sheet: a wrong code, a code nobody has, and no connection are each explained', async () => {
   const { repo } = await freshApp();
-  const backend = syncWith(repo);
+  const backend = await syncWith(repo);
   await openSyncSheet();
   const input = topSheet().querySelector('input[aria-label="Board code"]');
   typeInto(input, 'hello');
@@ -584,19 +587,19 @@ test('username: asked for until a good one is given, with no way to skip it', as
   assert.ok(dialog.textContent.includes('Choose a username') && dialog.textContent.includes('cannot be changed'));
   assert.ok(!buttonWith(dialog, 'Cancel'), 'there is no way to skip it');
   click(buttonWith(dialog, 'Continue'));
-  assert.ok(dialog.querySelector('[role=alert]').textContent.includes('2 to 20'), 'an empty name is refused');
+  assert.ok(dialog.querySelector('[role=alert]').textContent.includes('3 to 20'), 'an empty name is refused');
   typeInto(dialog.querySelector('input'), 'x');
   click(buttonWith(dialog, 'Continue'));
-  assert.ok(dialog.querySelector('[role=alert]').textContent.includes('2 to 20'), 'a one-letter name is refused');
+  assert.ok(dialog.querySelector('[role=alert]').textContent.includes('3 to 20'), 'a one-letter name is refused');
   typeInto(dialog.querySelector('input'), 'taken');
   click(buttonWith(dialog, 'Continue'));
   await wait(50);
   assert.eq(dialog.querySelector('[role=alert]').textContent, 'Not that one.', 'a reason from saving is shown');
   assert.ok(document.querySelector('.dialog'), 'and it stays');
-  typeInto(dialog.querySelector('input'), '  Zeke  B ');
+  typeInto(dialog.querySelector('input'), '  Zeke_B ');
   click(buttonWith(dialog, 'Continue'));
-  assert.eq(await waiting, 'Zeke B');
-  assert.eq(saved, ['Zeke B']);
+  assert.eq(await waiting, 'zeke_b');
+  assert.eq(saved, ['zeke_b']);
   assert.ok(!document.querySelector('.dialog'), 'then it goes');
   root.replaceChildren();
 });
@@ -605,7 +608,7 @@ test('list: drafts are marked, your own stars show, and the Show filter finds yo
   const { repo, root } = await freshApp();
   const draft = await repo.saveClimb(climbData({ name: 'My draft' }));
   await repo.markPublished((await repo.saveClimb(climbData({ name: 'My uploaded' }))).id);
-  await repo.applyPublished('test-wall', [{ id: 'friends-climb1', name: 'Friend climb', grade: 3, comment: '', author: 'Zeke', holds: '1:hand', createdAt: 5, updatedAt: 5, serverTime: 's' }]);
+  await repo.applyPublished('test-wall', [{ id: 'friends-climb1', name: 'Friend climb', grade: 3, comment: '', author: 'zeke', holds: '1:hand', createdAt: 5, updatedAt: 5, serverTime: 's' }]);
   await repo.setRating(draft.id, 3);
   const screen = await mountList(root);
   const rowFor = (name) => [...root.querySelectorAll('.row')].find((row) => row.querySelector('.row-name').textContent === name);
@@ -615,7 +618,7 @@ test('list: drafts are marked, your own stars show, and the Show filter finds yo
   assert.eq(rowFor('Friend climb').querySelectorAll('.star-on').length, 0);
   assert.ok(rowFor('My draft').querySelector('.badge').textContent === 'Draft');
   assert.ok(!rowFor('My uploaded').querySelector('.badge') && !rowFor('Friend climb').querySelector('.badge'), 'only drafts are marked');
-  assert.ok(rowFor('Friend climb').textContent.includes('by Zeke'));
+  assert.ok(rowFor('Friend climb').textContent.includes('by zeke'));
 
   const filtersButton = () => [...root.querySelectorAll('button.chip')].find((button) => button.textContent.includes('Filters') || button.textContent.includes('My ') || button.textContent.includes('All'));
   click(filtersButton());
@@ -633,7 +636,7 @@ test('list: drafts are marked, your own stars show, and the Show filter finds yo
 
 test('viewer: a draft of yours can be uploaded after a warning, and then it can no longer be edited or deleted', async () => {
   const { repo, root } = await freshApp();
-  const backend = syncWith(repo);
+  const backend = await syncWith(repo);
   const made = await repo.saveClimb(climbData({ name: 'Mine' }));
   await app.sync.createBoard('test-wall');
   const screen = await mountViewer(root, { id: made.id });
@@ -666,8 +669,8 @@ test('viewer: a draft of yours can be uploaded after a warning, and then it can 
 
 test('viewer: a friend\'s climb has no Upload, Edit or Delete; with no board yet, Upload leads to the board panel', async () => {
   const { repo, root } = await freshApp();
-  syncWith(repo);
-  await repo.applyPublished('test-wall', [{ id: 'friends-climb1', name: 'Friend climb', grade: 3, comment: '', author: 'Zeke', holds: '1:hand', createdAt: 5, updatedAt: 5, serverTime: 's' }]);
+  await syncWith(repo);
+  await repo.applyPublished('test-wall', [{ id: 'friends-climb1', name: 'Friend climb', grade: 3, comment: '', author: 'zeke', holds: '1:hand', createdAt: 5, updatedAt: 5, serverTime: 's' }]);
   const screen = await mountViewer(root, { id: 'friends-climb1' });
   assert.ok(!buttonWith(root, 'Upload'));
   assert.ok(root.querySelector('[aria-label="Edit climb"]').hidden && root.querySelector('[aria-label="Delete climb"]').hidden);
@@ -698,17 +701,194 @@ test('editor: an uploaded climb cannot be opened for editing, even by its addres
 test('share sheet: shows your username, which can be changed until you upload, then is locked', async () => {
   const { repo } = await freshApp();
   await openSharingSheet();
-  assert.eq(topSheet().querySelector('.username').textContent, 'Tester');
+  assert.eq(topSheet().querySelector('.username').textContent, 'tester');
   click(buttonWith(topSheet(), 'Change'));
   await wait(50);
-  typeInto(document.querySelector('.dialog input'), 'Tester Two');
+  typeInto(document.querySelector('.dialog input'), 'Tester-Two');
   click(buttonWith(document.querySelector('.dialog'), 'Save'));
   await wait(200);
-  assert.eq(await repo.authorName(), 'Tester Two');
+  assert.eq(await repo.authorName(), 'tester-two');
   const made = await repo.saveClimb(climbData());
   await repo.markPublished(made.id);
   await openSharingSheet();
   assert.ok(!buttonWith(topSheet(), 'Change') && topSheet().textContent.includes('Locked'));
   assert.ok(topSheet().textContent.includes('can no longer be changed'));
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+});
+
+// ---- accounts, and marking climbs as sent ----
+
+/** The app with a Firebase stand-in but nobody signed in. */
+function appWithoutAccount(repo, backend = new FakeFirebase()) {
+  const tokens = { load: () => repo.getMeta('syncAuth'), save: (auth) => repo.setMetaQuietly('syncAuth', auth) };
+  const remote = new FirestoreRemote({ config: { apiKey: backend.apiKey, projectId: backend.projectId }, tokens, fetchImpl: backend.fetch, now: () => backend.clock.now });
+  app.sync = new SyncService({ repo, remote, now: () => backend.clock.now });
+  return backend;
+}
+const fill = (dialog, label, value) => typeInto(dialog.querySelector(`input[aria-label="${label}"]`), value);
+
+test('account: the dialog creates an account, explains problems in plain words, and can sign in to an existing one', async () => {
+  const { repo } = await freshApp();
+  const backend = appWithoutAccount(repo);
+  await app.sync.remote.signUp('taken-name', 'whatever-123'); // somebody else's account, made elsewhere
+  await app.sync.remote.signOut();
+  const waiting = askForAccount({ sync: app.sync });
+  const dialog = document.querySelector('.dialog');
+  assert.ok(dialog.textContent.includes('Create your account') && dialog.textContent.includes('no way to reset'), 'it says there is no reset');
+  assert.ok(!buttonWith(dialog, 'Later'), 'a new user cannot skip it');
+  const problem = () => dialog.querySelector('[role=alert]').textContent;
+  click(buttonWith(dialog, 'Create account'));
+  assert.ok(problem().includes('3 to 20'), problem());
+  fill(dialog, 'Username', 'Alex');
+  fill(dialog, 'Password', 'short');
+  click(buttonWith(dialog, 'Create account'));
+  assert.ok(problem().includes('at least 8'), problem());
+  fill(dialog, 'Password', 'a-good-password');
+  fill(dialog, 'Password again', 'a-different-one');
+  click(buttonWith(dialog, 'Create account'));
+  assert.ok(problem().includes('not the same'), problem());
+  fill(dialog, 'Username', 'taken-name');
+  fill(dialog, 'Password again', 'a-good-password');
+  click(buttonWith(dialog, 'Create account'));
+  await wait(200);
+  assert.ok(problem().includes('username is taken'), problem());
+  assert.ok(document.querySelector('.dialog'), 'and it stays');
+
+  click(buttonWith(dialog, 'I already have an account'));
+  assert.ok(dialog.querySelector('h2').textContent === 'Sign in' && dialog.querySelector('input[aria-label="Password again"]').hidden);
+  fill(dialog, 'Password', 'wrong-password');
+  click(buttonWith(dialog, 'Sign in'));
+  await wait(200);
+  assert.ok(problem().includes('Wrong username or password'), problem());
+  backend.offline = true;
+  click(buttonWith(dialog, 'Sign in'));
+  await wait(200);
+  assert.ok(problem().includes('no connection'), problem());
+  backend.offline = false;
+  fill(dialog, 'Password', 'whatever-123');
+  click(buttonWith(dialog, 'Sign in'));
+  assert.eq(await waiting, 'taken-name');
+  assert.eq(await repo.authorName(), 'taken-name', 'the username on this phone is the account\'s');
+  assert.eq(await app.sync.account(), { username: 'taken-name' });
+  assert.ok(!document.querySelector('.dialog'));
+  app.sync = null;
+});
+
+test('account: a new account takes the climbs made on this phone before it; "Later" leaves things as they were', async () => {
+  const { repo } = await freshApp();
+  appWithoutAccount(repo);
+  const draft = await repo.saveClimb(climbData({ name: 'Made as tester' }));
+  const waiting = askForAccount({ sync: app.sync, suggest: 'tester', canSkip: true });
+  const dialog = document.querySelector('.dialog');
+  assert.eq(dialog.querySelector('input[aria-label="Username"]').value, 'tester', 'the name already on the phone is suggested');
+  fill(dialog, 'Password', 'a-good-password');
+  fill(dialog, 'Password again', 'a-good-password');
+  fill(dialog, 'Username', 'new-name');
+  click(buttonWith(dialog, 'Create account'));
+  assert.eq(await waiting, 'new-name');
+  assert.eq((await repo.getClimb(draft.id)).author, 'new-name', 'the draft became the new username\'s');
+  app.sync = null;
+
+  const later = askForAccount({ sync: appWithoutAccount(repo) && app.sync, canSkip: true });
+  click(buttonWith(document.querySelector('.dialog'), 'Later'));
+  assert.eq(await later, null);
+  assert.ok(!document.querySelector('.dialog'));
+  app.sync = null;
+});
+
+test('share sheet: signed in it shows who you are and can sign out; signed out it offers to sign in', async () => {
+  const { repo } = await freshApp();
+  await syncWith(repo);
+  await openSharingSheet();
+  assert.eq(topSheet().querySelector('.username').textContent, 'tester');
+  assert.ok(topSheet().textContent.includes('Signed in as'));
+  assert.ok(!buttonWith(topSheet(), 'Change'), 'the username belongs to the account, so there is no Change');
+  click(buttonWith(topSheet(), 'Sign out'));
+  await wait(50);
+  assert.ok(document.querySelector('.dialog').textContent.includes('Your climbs stay on this phone'));
+  click(buttonWith(document.querySelector('.dialog'), 'Sign out'));
+  await wait(200);
+  assert.eq(await app.sync.account(), null);
+  assert.eq(await repo.authorName(), 'tester', 'the name stays on the phone');
+  await openSharingSheet();
+  assert.ok(topSheet().textContent.includes('Not signed in'));
+  click(buttonWith(topSheet(), 'Sign in or create account'));
+  await wait(100);
+  const dialog = document.querySelector('.dialog');
+  assert.ok(dialog && dialog.textContent.includes('Create your account') && buttonWith(dialog, 'Later'));
+  click(buttonWith(dialog, 'Later'));
+  await wait(50);
+  app.sync = null;
+});
+
+test('viewer: uploading while signed out asks you to sign in first', async () => {
+  const { repo, root } = await freshApp();
+  appWithoutAccount(repo);
+  const draft = await repo.saveClimb(climbData({ name: 'Needs an account' }));
+  const screen = await mountViewer(root, { id: draft.id });
+  click(buttonWith(root, 'Upload'));
+  await wait(150);
+  const dialog = document.querySelector('.dialog');
+  assert.ok(dialog && dialog.querySelector('h2').textContent === 'Sign in', 'it asks to sign in');
+  click(buttonWith(dialog, 'Later'));
+  await wait(100);
+  assert.ok(!(await repo.getClimb(draft.id)).publishedAt, 'nothing was uploaded');
+  screen.destroy();
+  app.sync = null;
+});
+
+test('sent: the button marks a climb as sent and shows it, in the viewer and the list, and only on this phone', async () => {
+  const { repo, root } = await freshApp();
+  const made = await repo.saveClimb(climbData({ name: 'Worked it' }));
+  await repo.saveClimb(climbData({ name: 'Not yet' }));
+  const screen = await mountViewer(root, { id: made.id });
+  const button = () => root.querySelector('.caption .pill-btn[aria-pressed]');
+  assert.eq([button().textContent, button().getAttribute('aria-pressed')], ['Mark sent', 'false']);
+  click(button());
+  await wait(100);
+  assert.eq([button().textContent, button().getAttribute('aria-pressed')], ['✓ Sent', 'true']);
+  assert.ok(button().classList.contains('on'));
+  assert.ok((await repo.getSentAt(made.id)) > 0, 'it is saved on this phone');
+  assert.ok(document.querySelector('.toast').textContent.includes('sent'));
+  click(root.querySelector('[aria-label="Climb info"]'));
+  assert.ok(topSheet().textContent.includes('You sent it on'), topSheet().textContent);
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  screen.destroy();
+  root.replaceChildren();
+
+  const list = await mountList(root);
+  const rowFor = (name) => [...root.querySelectorAll('.row')].find((row) => row.querySelector('.row-name').textContent === name);
+  const names = () => [...root.querySelectorAll('.row .row-name')].map((el) => el.textContent).sort();
+  assert.eq(rowFor('Worked it').querySelector('.badge.ok').textContent, '✓ Sent');
+  assert.ok(!rowFor('Not yet').querySelector('.badge.ok'));
+  click([...root.querySelectorAll('button.chip')].find((b) => b.textContent.includes('Filters')));
+  const sheet = document.querySelector('.sheet');
+  click(buttonWith(sheet, 'Sent'));
+  assert.eq(names(), ['Worked it']);
+  click(buttonWith(sheet, 'Not sent yet'));
+  assert.eq(names(), ['Not yet']);
+  assert.ok([...root.querySelectorAll('button.chip')].some((b) => b.textContent.includes('Not sent yet')), 'the filter button says what is on');
+  click([...sheet.querySelectorAll('button')].filter((b) => b.textContent === 'Any').at(-1)); // the last "Any" is the one for sent
+  assert.eq(names().length, 2);
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  list.destroy();
+  root.replaceChildren();
+
+  const again = await mountViewer(root, { id: made.id });
+  click(root.querySelector('.caption .pill-btn[aria-pressed]')); // a second press takes it back
+  await wait(100);
+  assert.eq(await repo.getSentAt(made.id), 0);
+  assert.eq(root.querySelector('.caption .pill-btn[aria-pressed]').textContent, 'Mark sent');
+  again.destroy();
+});
+
+test('sent: climbs from friends and uploaded climbs can be marked sent too', async () => {
+  const { repo, root } = await freshApp();
+  await repo.applyPublished('test-wall', [{ id: 'friends-climb1', name: 'Friend climb', grade: 3, comment: '', author: 'zeke', holds: '1:hand', createdAt: 5, updatedAt: 5, serverTime: 's' }]);
+  const screen = await mountViewer(root, { id: 'friends-climb1' });
+  click(root.querySelector('.caption .pill-btn[aria-pressed]'));
+  await wait(100);
+  assert.ok((await repo.getSentAt('friends-climb1')) > 0);
+  assert.eq(root.querySelector('.caption .tag').textContent, 'Uploaded');
+  screen.destroy();
 });

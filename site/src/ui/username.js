@@ -1,4 +1,4 @@
-import { MAX_USERNAME, cleanUsername } from '../domain/climbs.js';
+import { MAX_USERNAME, USERNAME_HELP, cleanUsername } from '../domain/climbs.js';
 import { h } from './dom.js';
 
 /**
@@ -23,7 +23,7 @@ export function askForUsername(save) {
     async function go() {
       const name = cleanUsername(input.value);
       if (name === null) {
-        problem.textContent = `Use 2 to ${MAX_USERNAME} letters, digits, spaces, dots, dashes or underscores.`;
+        problem.textContent = USERNAME_HELP;
         return;
       }
       button.disabled = true;

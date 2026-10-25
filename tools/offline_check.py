@@ -33,7 +33,7 @@ def part_one():
     browser = Browser()
     try:
         base = "http://localhost:8092"
-        browser.go(f"{base}/site/")
+        browser.go(f"{base}/site/?nosync=1")
         browser.choose_username()
         browser.eval("window.__loadedOnce = true")
         saved = browser.wait_for(
@@ -76,7 +76,7 @@ def part_one():
         browser.go(f"{base}/site/sw.js")
         shown = browser.eval("document.body.innerText")
         check("const VERSION" in shown, "online: a link to a file opens that file, not the app")
-        browser.go(f"{base}/site/some-page-typed-by-hand")
+        browser.go(f"{base}/site/some-page-typed-by-hand?nosync=1")
         check(browser.wait_for("document.querySelectorAll('.row').length", what="the app at an address with no file name") == 3, "online: an address with no file name opens the app")
 
         # Now switch the server off for real.
@@ -86,7 +86,7 @@ def part_one():
         )
         check(down == "unreachable", f"the server is really off ({down})")
 
-        browser.go(f"{base}/site/")
+        browser.go(f"{base}/site/?nosync=1")
         rows = browser.wait_for("document.querySelectorAll('.row').length", seconds=20, what="the list to appear offline")
         check(rows == 3, f"offline: the app opened from the phone's copy and shows {rows} climbs")
         check(browser.eval("document.querySelector('.bar-name').textContent") == "Home wall", "offline: the wall's name is there")
@@ -109,7 +109,7 @@ def part_one():
                 let n = 0, t = 0; for (let i = 0; i < d.length; i += 4 * 61) { t++; if (d[i + 3] > 0) n++; } return n / t; })()"""
         )
         check(painted > 0.5, f"offline: the climb is drawn on the wall ({painted:.2f} of the picture painted)")
-        browser.go(f"{base}/site/index.html?typed=by-hand")
+        browser.go(f"{base}/site/index.html?typed=by-hand&nosync=1")
         check(browser.wait_for("document.querySelectorAll('.row').length", what="the app at a hand-typed address") == 3, "offline: an address typed by hand still opens the app")
         errors = browser.console_errors()
         check(not errors, f"no uncaught errors in the page ({len(errors)})")
@@ -128,7 +128,7 @@ def part_two():
     browser = Browser()
     try:
         base = "http://localhost:8093"
-        browser.go(f"{base}/site/")
+        browser.go(f"{base}/site/?nosync=1")
         browser.choose_username()
         first = browser.wait_for(
             "(async () => { const k = await caches.keys(); return k.length ? k[0] : ''; })()", seconds=25, what="the first version to be saved"
@@ -139,7 +139,7 @@ def part_two():
         # A new version of the site appears on the server.
         (work / "site" / "styles.css").write_text((work / "site" / "styles.css").read_text(encoding="utf-8") + "\n/* a change */\n", encoding="utf-8")
         subprocess.run([sys.executable, str(stamp), str(work / "site")], check=True, capture_output=True)
-        browser.go(f"{base}/site/")
+        browser.go(f"{base}/site/?nosync=1")
         toast = browser.wait_for("document.querySelector('.toast') ? document.querySelector('.toast').textContent : ''", seconds=25, what="the update message")
         check("new version" in toast.lower(), f"the app offers the update: \"{toast}\"")
         still_old = browser.eval("(async () => (await caches.keys()).join(','))()")

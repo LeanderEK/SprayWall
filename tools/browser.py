@@ -111,6 +111,26 @@ class Browser:
         )
         self.wait_for("!document.querySelector('.dialog') && !!document.querySelector('.bar')", what="the app after choosing a username")
 
+    _FILL = "const set = (label, value) => { const input = [...document.querySelectorAll('.dialog input')].find((i) => i.getAttribute('aria-label') === label); input.value = value; };"
+
+    def create_account(self, name: str, password: str = "test-password-1"):
+        """Answers the account dialog of a fresh app (the one shown when a Firebase project is set up) by making an account."""
+        self.wait_for("!![...document.querySelectorAll('.dialog input')].find((i) => i.getAttribute('aria-label') === 'Username')", what="the account question")
+        self.eval(
+            "(() => { " + self._FILL + " set('Username', %r); set('Password', %r); set('Password again', %r); "
+            "document.querySelector('.dialog button[type=submit]').click(); return true; })()" % (name, password, password)
+        )
+        self.wait_for("!document.querySelector('.dialog') && !!document.querySelector('.bar')", what="the app after creating the account")
+
+    def sign_in(self, name: str, password: str = "test-password-1"):
+        """Answers the account dialog of a fresh app by signing in to an account that already exists."""
+        self.wait_for("!![...document.querySelectorAll('.dialog input')].find((i) => i.getAttribute('aria-label') === 'Username')", what="the account question")
+        self.eval(
+            "(() => { [...document.querySelectorAll('.dialog button')].find((b) => b.textContent === 'I already have an account').click(); "
+            + self._FILL + " set('Username', %r); set('Password', %r); document.querySelector('.dialog button[type=submit]').click(); return true; })()" % (name, password)
+        )
+        self.wait_for("!document.querySelector('.dialog') && !!document.querySelector('.bar')", what="the app after signing in")
+
     def console_errors(self):
         out = []
         for event in self.events:

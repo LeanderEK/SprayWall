@@ -1,4 +1,4 @@
-import { MAX_STARS, cleanUsername, cleanWallName, isMine, sameName } from '../domain/climbs.js';
+import { MAX_STARS, USERNAME_HELP, cleanUsername, cleanWallName, isMine, sameName } from '../domain/climbs.js';
 import { makeShare } from '../domain/share.js';
 
 // Everything the app remembers, behind one object. It talks to a "store" with four calls (get, put, remove, all) over
@@ -11,7 +11,8 @@ import { makeShare } from '../domain/share.js';
 // arriving later in a shared file, from bringing it back.
 // A climb starts as a draft: only on this phone, and it can be changed or deleted. Uploading it to a shared board gives it a
 // `publishedAt`; from then on it can never be changed or deleted (a climb that came from a board has one too).
-// Star ratings are the owner's own and stay on this phone, in the meta table as `rating:<climb id>`. The username is meta `author`.
+// Star ratings and "sent" marks are the owner's own and stay on this phone, in the meta table as `rating:<climb id>` and
+// `sent:<climb id>` (when it was sent). The username is meta `author`.
 
 export const newId = () => {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -82,20 +83,21 @@ export class Repo {
   authorName = async () => (await this.getMeta('author')) || '';
 
   /**
-   * Chooses (or changes) the username. The first time, climbs on this phone that have no name on them are yours and take it.
-   * Once any climb of yours is uploaded the name is on a shared board for good, so it can no longer be changed.
-   * Returns the cleaned name, or throws an Error saying why not.
+   * Chooses (or changes) the username. Climbs on this phone that have no name on them are yours and take it. By default a
+   * change of name also renames your drafts (`renameDrafts: false` leaves them, for signing in as somebody else).
+   * Once any climb of yours is uploaded the name is on a shared board for good, so it can no longer be changed, unless
+   * `force` is given (an account decides the name then). Returns the cleaned name, or throws an Error saying why not.
    */
-  async setUsername(text) {
+  async setUsername(text, { force = false, renameDrafts = true } = {}) {
     const name = cleanUsername(text);
-    if (name === null) throw new Error('A username is 2 to 20 letters, digits, spaces, dots, dashes or underscores.');
+    if (name === null) throw new Error(USERNAME_HELP);
     const old = await this.authorName();
-    if (old && !sameName(old, name) && !(await this.canChangeUsername())) throw new Error('You have uploaded climbs under your current username, so it cannot be changed.');
+    if (!force && old && !sameName(old, name) && !(await this.canChangeUsername())) throw new Error('You have uploaded climbs under your current username, so it cannot be changed.');
     await this.#put('meta', { k: 'author', value: name });
     for (const climb of await this.store.all('climbs')) {
       if (climb.deletedAt) continue;
       const unnamed = climb.author === '' || climb.author === undefined;
-      const mineBefore = old && sameName(climb.author, old) && !climb.publishedAt; // drafts follow a name change
+      const mineBefore = renameDrafts && old && sameName(climb.author, old) && !climb.publishedAt; // drafts follow a change of name
       if (unnamed || mineBefore) await this.#put('climbs', { ...climb, author: name });
     }
     this.#changed();
@@ -132,6 +134,34 @@ export class Repo {
     else await this.#put('meta', { k: `rating:${id}`, value: clean });
     this.#changed();
     return clean;
+  }
+
+  // ---- sent (completed) climbs, kept on this phone only ----
+
+  /** Every climb you have marked as sent: a Map from climb id to when. */
+  async getSent() {
+    const sent = new Map();
+    for (const { k, value } of await this.store.all('meta')) if (k.startsWith('sent:') && Number.isFinite(value) && value > 0) sent.set(k.slice(5), value);
+    return sent;
+  }
+
+  /** When you sent a climb (0 if you have not). */
+  async getSentAt(id) {
+    const value = await this.getMeta(`sent:${id}`);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
+  /** Marks a climb as sent (now), or with false takes the mark away. Returns when it was sent, or 0. */
+  async setSent(id, sent = true) {
+    if (!sent) {
+      await this.store.remove('meta', `sent:${id}`);
+      this.#changed();
+      return 0;
+    }
+    const at = this.now();
+    await this.#put('meta', { k: `sent:${id}`, value: at });
+    this.#changed();
+    return at;
   }
 
   /**

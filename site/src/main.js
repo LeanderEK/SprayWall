@@ -9,6 +9,7 @@ import { h, toast } from './ui/dom.js';
 import { mountEditor } from './ui/editor.js';
 import { mountImporter } from './ui/importer.js';
 import { mountList } from './ui/list.js';
+import { askForAccount } from './ui/account.js';
 import { askForUsername } from './ui/username.js';
 import { mountViewer } from './ui/viewer.js';
 import { mountWalls } from './ui/walls.js';
@@ -139,21 +140,48 @@ async function start() {
   }
   askToKeepData();
   await app.repo.upgradeData();
-  // Everyone has a username. Climbs from before there were usernames (no name on them) are the owner's, so they take it.
-  const username = cleanUsername(await app.repo.authorName());
-  if (username) await app.repo.setUsername(username);
-  else await askForUsername((name) => app.repo.setUsername(name));
   startSync();
+  await ensureIdentity();
   depth = history.state?.depth ?? 0;
   if (history.state === null) history.replaceState({ depth: 0 }, '', location.href);
   await render();
   registerServiceWorker();
 }
 
+/**
+ * Everyone has a username. With a Firebase project it comes from an account (unique, and the same on every phone): a brand
+ * new user has to make or sign in to one before anything else, while somebody who already has a name on this phone is asked
+ * once and may say "Later". Without a Firebase project a name on this phone is all there is.
+ */
+async function ensureIdentity() {
+  const { repo, sync } = app;
+  const account = await sync.account();
+  if (account) {
+    await repo.setUsername(account.username, { force: true, renameDrafts: false });
+    return;
+  }
+  const local = cleanUsername(await repo.authorName());
+  if (!sync.available) {
+    if (local) await repo.setUsername(local); // climbs from before usernames (no name on them) are the owner's, so they take it
+    else await askForUsername((name) => repo.setUsername(name));
+    return;
+  }
+  if (local) {
+    await repo.setUsername(local);
+    if (!(await repo.getMeta('accountSkipped'))) {
+      const done = await askForAccount({ sync, suggest: local, canSkip: true });
+      if (done === null) await repo.setMetaQuietly('accountSkipped', true);
+    }
+    return;
+  }
+  await askForAccount({ sync });
+}
+
 /** Keeps walls that have a shared board in step with it. Without a Firebase project in sync-config.js there is no sync. */
 function startSync() {
   const tokens = { load: () => app.repo.getMeta('syncAuth'), save: (auth) => app.repo.setMetaQuietly('syncAuth', auth) };
-  const remote = FIREBASE ? new FirestoreRemote({ config: FIREBASE, tokens }) : null;
+  // `?nosync` leaves the shared boards off (for developing and for the checks that must not touch the real database).
+  const remote = FIREBASE && !new URLSearchParams(location.search).has('nosync') ? new FirestoreRemote({ config: FIREBASE, tokens }) : null;
   app.sync = new SyncService({ repo: app.repo, remote });
   app.sync.start();
 }

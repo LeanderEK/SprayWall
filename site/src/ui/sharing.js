@@ -1,6 +1,7 @@
 import { app } from '../app.js';
 import { makeShare, packShare, parseShare, linkFor, shareToText, ShareError, unpackShare } from '../domain/share.js';
-import { copyText, filePickerButton, h, isIos, isStandalone, openSheet, promptDialog, shareFile, shareLink, toast } from './dom.js';
+import { confirmDialog, copyText, filePickerButton, h, isIos, isStandalone, openSheet, promptDialog, shareFile, shareLink, toast } from './dom.js';
+import { askForAccount } from './account.js';
 import { openSyncSheet, syncStatusText } from './syncsheet.js';
 
 // Everything about getting climbs to and from other people: files, links, pasted links, and a backup of everything.
@@ -80,7 +81,19 @@ export async function openSharingSheet() {
   const name = await app.repo.authorName();
   const setup = wall && app.sync?.available ? await app.repo.getSyncSetup(wall.key) : null;
   const syncLine = setup ? `Synced with a board. ${syncStatusText(app.sync.stateOf(wall.key), setup)}` : '';
+  const online = Boolean(app.sync?.available); // with a Firebase project the username comes from an account
+  const account = online ? await app.sync.account() : null;
   const canChange = await app.repo.canChangeUsername();
+  const signOut = async () => {
+    if (!(await confirmDialog({ title: 'Sign out?', text: 'Your climbs stay on this phone. Until you sign in again you cannot upload or receive new climbs. Sign in again with your username and password, on this or any phone.', confirmLabel: 'Sign out', danger: true }))) return;
+    await app.sync.signOut();
+    sheet.close();
+    toast('Signed out.');
+  };
+  const signIn = async () => {
+    sheet.close();
+    await askForAccount({ sync: app.sync, canSkip: true });
+  };
   const changeName = async () => {
     const next = await promptDialog({ title: 'Change username', label: 'Username', value: name, confirmLabel: 'Save', maxLength: 20 });
     if (next === null) return;
@@ -103,8 +116,15 @@ export async function openSharingSheet() {
   const content = h(
     'div',
     { class: 'sheet-body' },
-    h('div', { class: 'row-between' }, h('div', {}, h('div', { class: 'detail-label' }, 'Your username'), h('div', { class: 'username' }, name)), canChange ? h('button', { type: 'button', class: 'text-btn', onclick: changeName }, 'Change') : h('span', { class: 'tag' }, 'Locked')),
-    canChange ? null : h('p', { class: 'note' }, 'You have uploaded climbs under this username, so it can no longer be changed.'),
+    online
+      ? [
+          h('div', { class: 'row-between' }, h('div', {}, h('div', { class: 'detail-label' }, account ? 'Signed in as' : 'Not signed in'), h('div', { class: 'username' }, account ? account.username : name || '—')), account ? h('button', { type: 'button', class: 'text-btn', onclick: signOut }, 'Sign out') : h('button', { type: 'button', class: 'btn', onclick: signIn }, 'Sign in or create account')),
+          account ? h('p', { class: 'note' }, 'Your username is yours alone and is the same on every phone you sign in on.') : h('p', { class: 'note' }, 'Without an account you cannot upload climbs or receive friends\' climbs. Everything else works.'),
+        ]
+      : [
+          h('div', { class: 'row-between' }, h('div', {}, h('div', { class: 'detail-label' }, 'Your username'), h('div', { class: 'username' }, name)), canChange ? h('button', { type: 'button', class: 'text-btn', onclick: changeName }, 'Change') : h('span', { class: 'tag' }, 'Locked')),
+          canChange ? null : h('p', { class: 'note' }, 'You have uploaded climbs under this username, so it can no longer be changed.'),
+        ],
     h('h3', {}, 'Import climbs'),
     h('div', { class: 'row-buttons' }, filePickerButton('From a file', { accept: '.json,application/json,.spraywall', multiple: true, onFiles: (files) => { sheet.close(); importFiles(files); } })),
     h('label', { class: 'field-label' }, 'Or paste a link', pasteBox),
