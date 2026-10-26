@@ -58,7 +58,8 @@ test('username: 3 to 20 lowercase letters, digits, dashes or underscores; capita
   assert.eq(cleanUsername('x'.repeat(20)), 'x'.repeat(20));
   for (const bad of ['', ' ', 'a', 'ab', 'x'.repeat(21), 'zeke b', 'Åsa', 'a.b', '-lead', '_lead', '<b>hi</b>', '🙂🙂🙂', 'semi;colon', 'a@b.com', null, undefined]) assert.eq(cleanUsername(bad), null, String(bad));
   assert.ok(isMine({ author: 'zeke' }, ' Zeke '), 'capitals and spaces at the ends do not matter');
-  assert.ok(!isMine({ author: '' }, ''), 'no name is nobody\'s');
+  assert.ok(isMine({ author: '' }, ''), 'a climb with no name on it was made on this phone, before there was a username');
+  assert.ok(!isMine({ author: 'zeke' }, 'bea'), 'someone else\'s is not yours');
 });
 
 test('account: the username becomes an email-style name nobody can get mail at, and the password needs 8 characters', () => {

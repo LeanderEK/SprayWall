@@ -7,6 +7,7 @@ export const app = {
   repo: null,
   nav: null,
   sync: null, // the SyncService (see data/sync.js)
+  setupHooks: {}, // { fetchPack, importPack } to use instead of the real ones when the default wall is downloaded (for tests)
   query: defaultQuery(),
   pending: null, // a share (already checked) waiting on the import screen
   leaveGuard: null, // set by the editor while it has unsaved changes: () => Promise<boolean>

@@ -37,8 +37,8 @@ export const USERNAME_HELP = 'Use 3 to 20 letters, digits, dashes or underscores
 /** Two usernames are the same person's, whatever the capitals. */
 export const sameName = (a, b) => Boolean(a) && Boolean(b) && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
 
-/** A climb you made: it carries your username. */
-export const isMine = (climb, me) => sameName(climb.author, me);
+/** A climb you made: it carries your username. (One with no name on it was made on this phone before there was a username.) */
+export const isMine = (climb, me) => !climb.author || sameName(climb.author, me);
 
 /** A climb that has been uploaded to a shared board (or came from one): it can no longer be changed or deleted. */
 export const isUploaded = (climb) => Boolean(climb.publishedAt);

@@ -122,6 +122,12 @@ class Browser:
         )
         self.wait_for("!document.querySelector('.dialog') && !!document.querySelector('.bar')", what="the app after creating the account")
 
+    def skip_account(self):
+        """Answers the account dialog of a fresh app by tapping Later."""
+        self.wait_for("!![...document.querySelectorAll('.dialog button')].find((b) => b.textContent === 'Later')", what="the Later button")
+        self.eval("(() => { [...document.querySelectorAll('.dialog button')].find((b) => b.textContent === 'Later').click(); return true; })()")
+        self.wait_for("!document.querySelector('.dialog') && !!document.querySelector('.bar')", what="the app after Later")
+
     def sign_in(self, name: str, password: str = "test-password-1"):
         """Answers the account dialog of a fresh app by signing in to an account that already exists."""
         self.wait_for("!![...document.querySelectorAll('.dialog input')].find((i) => i.getAttribute('aria-label') === 'Username')", what="the account question")

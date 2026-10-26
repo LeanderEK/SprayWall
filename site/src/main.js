@@ -3,12 +3,12 @@ import { IdbStore, askToKeepData } from './data/db.js';
 import { FirestoreRemote } from './data/firestore.js';
 import { Repo } from './data/repo.js';
 import { SyncService } from './data/sync.js';
-import { cleanUsername } from './domain/climbs.js';
 import { FIREBASE } from './sync-config.js';
 import { h, toast } from './ui/dom.js';
 import { mountEditor } from './ui/editor.js';
 import { mountImporter } from './ui/importer.js';
 import { mountList } from './ui/list.js';
+import { ensureDefaults, ensureIdentity } from './setup.js';
 import { askForAccount } from './ui/account.js';
 import { askForUsername } from './ui/username.js';
 import { mountViewer } from './ui/viewer.js';
@@ -141,40 +141,45 @@ async function start() {
   askToKeepData();
   await app.repo.upgradeData();
   startSync();
-  await ensureIdentity();
+  await ensureIdentity({ repo: app.repo, sync: app.sync, askForAccount, askForUsername });
+  await setUpDefaults({ first: true });
+  // Signing in (or out) later: a phone that skipped the account joins the board as soon as it has one.
+  app.sync.onState((key) => key === null && setUpDefaults({ first: false }));
   depth = history.state?.depth ?? 0;
   if (history.state === null) history.replaceState({ depth: 0 }, '', location.href);
   await render();
   registerServiceWorker();
 }
 
+let settingUp = null;
+
 /**
- * Everyone has a username. With a Firebase project it comes from an account (unique, and the same on every phone): a brand
- * new user has to make or sign in to one before anything else, while somebody who already has a name on this phone is asked
- * once and may say "Later". Without a Firebase project a name on this phone is all there is.
+ * Puts the default wall and board in place (see setup.js) behind a "setting up" screen, and says in a message if something
+ * could not be done (it is tried again the next time the app opens). Switched off by ?nosync or ?nodefaults in the address.
  */
-async function ensureIdentity() {
-  const { repo, sync } = app;
-  const account = await sync.account();
-  if (account) {
-    await repo.setUsername(account.username, { force: true, renameDrafts: false });
-    return;
-  }
-  const local = cleanUsername(await repo.authorName());
-  if (!sync.available) {
-    if (local) await repo.setUsername(local); // climbs from before usernames (no name on them) are the owner's, so they take it
-    else await askForUsername((name) => repo.setUsername(name));
-    return;
-  }
-  if (local) {
-    await repo.setUsername(local);
-    if (!(await repo.getMeta('accountSkipped'))) {
-      const done = await askForAccount({ sync, suggest: local, canSkip: true });
-      if (done === null) await repo.setMetaQuietly('accountSkipped', true);
+function setUpDefaults({ first }) {
+  const params = new URLSearchParams(location.search);
+  if (params.has('nosync') || params.has('nodefaults')) return Promise.resolve();
+  settingUp ??= (async () => {
+    const screen = h('div', { class: 'setup-screen', role: 'status' }, h('div', { class: 'setup-box' }, h('div', { class: 'spinner' }), h('p', {}, 'Setting up…')));
+    const say = (text) => { screen.querySelector('p').textContent = text; };
+    let shown = false;
+    const progress = (text) => {
+      if (!shown) { document.body.append(screen); shown = true; }
+      say(text);
+    };
+    try {
+      const result = await ensureDefaults({ repo: app.repo, sync: app.sync, progress });
+      if (result.problem) toast(`${result.problem} It will try again next time, or use Walls → Get the AV wall.`);
+      else if (first && result.wall === 'imported') toast(result.board === 'joined' ? 'The AV wall and its shared climbs are ready.' : 'The AV wall is ready.');
+    } catch (error) {
+      console.error(error);
+    } finally {
+      screen.remove();
+      settingUp = null;
     }
-    return;
-  }
-  await askForAccount({ sync });
+  })();
+  return settingUp;
 }
 
 /** Keeps walls that have a shared board in step with it. Without a Firebase project in sync-config.js there is no sync. */

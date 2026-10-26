@@ -87,7 +87,7 @@ def main():
     you = Browser(port=9337)
     friend = Browser(port=9338)
     other_phone = Browser(port=9339)
-    base = "http://localhost:8095/site/?nosw=1"
+    base = "http://localhost:8095/site/?nosw=1&nodefaults=1"
     try:
         print(f"Accounts {alex} and {bea}")
         you.go(base)

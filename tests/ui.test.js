@@ -61,6 +61,7 @@ async function freshApp({ withWall = true } = {}) {
   app.query = { text: '', minGrade: 0, maxGrade: 17, minStars: 0, scope: 'all', sort: 'newest' };
   app.pending = null;
   app.sync = null;
+  app.setupHooks = {};
   app.leaveGuard = null;
   app.nav = { go: (path) => visits.push(['go', path]), replace: (path) => visits.push(['replace', path]), back: (path) => visits.push(['back', path]) };
   document.querySelectorAll('.sheet, .dialog, .backdrop, .toast').forEach((el) => el.remove());
@@ -891,4 +892,25 @@ test('sent: climbs from friends and uploaded climbs can be marked sent too', asy
   assert.ok((await repo.getSentAt('friends-climb1')) > 0);
   assert.eq(root.querySelector('.caption .tag').textContent, 'Uploaded');
   screen.destroy();
+});
+
+test('walls: Get the AV wall downloads and adds it, then the button goes away', async () => {
+  const { repo, root } = await freshApp({ withWall: false });
+  const asked = [];
+  app.setupHooks = {
+    fetchPack: async (url) => { asked.push(url); return new Blob(['a zip']); },
+    importPack: async (blob, theRepo) => theRepo.saveWall({ ...(await testWall()), key: 'av-wall', name: 'AV wall' }),
+  };
+  const screen = await mountWalls(root);
+  const button = buttonWith(root, 'Get the AV wall');
+  assert.ok(button && !button.hidden, 'with no AV wall on the phone the button is there');
+  click(button);
+  await wait(500);
+  assert.eq(asked, ['wall/av-wall.pack'.replace('.pack', '.zip')]);
+  assert.eq((await repo.getWall('av-wall')).name, 'AV wall');
+  assert.ok(buttonWith(root, 'Get the AV wall').hidden, 'and once it is there the button goes');
+  assert.ok(document.querySelector('.toast').textContent.includes('Added AV wall'), document.querySelector('.toast').textContent);
+  assert.ok(await repo.getMeta('defaults:wall'), 'it is remembered, so a deleted wall is not added again by itself');
+  screen.destroy();
+  app.setupHooks = {};
 });

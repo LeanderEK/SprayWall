@@ -1,4 +1,5 @@
 import { USERNAME_HELP, cleanUsername, isUploaded, sameName } from '../domain/climbs.js';
+import { MEMORY } from '../defaults.js';
 import { boardFits } from '../domain/wallpack.js';
 import { MIN_PASSWORD, SyncError, cleanPassword, cleanRemote, makeBoardCode, parseBoardCode, stampValue, toRecord } from '../domain/sync.js';
 
@@ -155,9 +156,10 @@ export class SyncService {
     await this.syncWall(wallKey).catch(() => {}); // a problem shows in the wall's state
   }
 
-  /** Stops using the board on this phone. Its climbs stay here (uploaded ones stay uploaded). */
+  /** Stops using the board on this phone. Its climbs stay here (uploaded ones stay uploaded). It is not joined again by itself. */
   async stop(wallKey) {
     await this.repo.setSyncSetup(wallKey, undefined);
+    await this.repo.setMetaQuietly(MEMORY.board, 'stopped');
     this.states.delete(wallKey);
     for (const listener of this.listeners) listener(wallKey);
   }

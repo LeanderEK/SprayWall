@@ -1,6 +1,8 @@
 import { app, wallPicture } from '../app.js';
 import { WallPackError, importWallPack } from '../data/wallimport.js';
+import { DEFAULTS } from '../defaults.js';
 import { ZipError } from '../domain/zip.js';
+import { ensureDefaults, installDefaultWall } from '../setup.js';
 import { confirmDialog, filePickerButton, h, iconButton, promptDialog, toast } from './dom.js';
 import { appBar } from './list.js';
 import { PAINT, drawThumb } from './wallview.js';
@@ -24,9 +26,28 @@ export async function mountWalls(root) {
     }
   }
 
+  const getDefault = h('button', { type: 'button', class: 'btn', onclick: getDefaultWall }, 'Get the AV wall');
+
+  /** Downloads the AV wall (the one every new install starts with), and joins its shared board if that has not been done. */
+  async function getDefaultWall() {
+    busy.hidden = false;
+    try {
+      const wall = await installDefaultWall({ repo, ...app.setupHooks, progress: (text) => { busy.textContent = text; } });
+      toast(`Added ${wall.name} with ${wall.holds.length} holds`);
+      const result = await ensureDefaults({ repo, sync: app.sync, ...app.setupHooks });
+      if (result.problem) toast(result.problem);
+    } catch (error) {
+      toast(error instanceof WallPackError || error instanceof ZipError ? error.message : error?.message || 'Could not get the AV wall.');
+    } finally {
+      busy.hidden = true;
+      busy.textContent = 'Importing the wall… this takes a few seconds.';
+    }
+  }
+
   async function render() {
     if (!alive) return;
     const walls = await repo.listWalls();
+    getDefault.hidden = walls.some((wall) => wall.key === DEFAULTS.wall.key);
     const active = await repo.activeWall();
     const items = await Promise.all(
       walls.map(async (wall) => {
@@ -65,7 +86,7 @@ export async function mountWalls(root) {
       'div',
       { class: 'scroll pad' },
       h('p', { class: 'note' }, 'A wall pack is a .zip with the wall photo and a holds.json that says where every hold is. Importing a pack for a wall you already have updates it and keeps its climbs.'),
-      h('div', { class: 'row-buttons' }, filePickerButton('Import wall pack', { accept: '.zip,application/zip,application/x-zip-compressed', className: 'btn primary', onFiles: importPack })),
+      h('div', { class: 'row-buttons' }, filePickerButton('Import wall pack', { accept: '.zip,application/zip,application/x-zip-compressed', className: 'btn primary', onFiles: importPack }), getDefault),
       busy,
       list,
     ),

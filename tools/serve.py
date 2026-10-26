@@ -48,6 +48,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not path.startswith("/site/"):
                 self.send_error(404)
                 return
+        if path.startswith("/site/wall/"):  # the publishing workflow puts the wall folder inside the site; here it sits beside it
+            self.path = self.path.replace("/site/wall/", "/wall/", 1)
         if path == "/__files":  # the tests ask which files the site holds
             site = ROOT / "site"
             names = sorted(p.relative_to(site).as_posix() for p in site.rglob("*") if p.is_file())

@@ -1,8 +1,10 @@
 # SprayWall
 
 Set climbs on your spray wall from your phone. Tap the holds on a photo of the wall, give the climb a grade, and keep it as a
-draft or upload it for your friends. Works on iPhone, iPad, Android and computers, costs nothing, needs no app store, and
+draft or upload it for everyone on the board. Works on iPhone, iPad, Android and computers, costs nothing, needs no app store, and
 **works with no signal** once it has been opened once.
+
+**Opening the app is all you do:** it sets up the AV wall (Adrenaline Vault) and joins its shared climbs by itself.
 
 * **The app:** https://leanderek.github.io/SprayWall/
 * **The AV wall (Adrenaline Vault) and its climbs, to download:** https://leanderek.github.io/SprayWall/wall/get.html
@@ -31,7 +33,8 @@ at all (try aeroplane mode). When a new version is out it says **A new version o
 
 ### Make your account
 
-The first time it opens, SprayWall asks you to create an account: a **username** and a **password**.
+The first time it opens, SprayWall asks you to create an account: a **username** and a **password**. (You can tap **Later** to look
+around first; you need the account to upload climbs and to receive other people's.)
 
 * The username is **yours alone** (nobody else can have it), 3 to 20 letters, digits, dashes or underscores, always lowercase.
   It is shown on every climb you upload.
@@ -41,16 +44,18 @@ The first time it opens, SprayWall asks you to create an account: a **username**
 * The same username and password sign you in on **any** phone: on the new phone choose **I already have an account**.
 * You need a connection for this step only. Everything else works offline.
 
-### Load the wall
+### The AV wall and its shared climbs: automatic
 
-A **wall** is a photo of the board plus a map of where every hold is. The AV wall is ready to download:
+A **wall** is a photo of the board plus a map of where every hold is. Straight after you make your account (or tap Later) a "Setting up"
+screen downloads the **AV wall** and adds it, and, once you have an account, **joins the AV board**, so every climb anyone has
+uploaded is already in your list. That takes a few seconds, once. If there was no connection it says so and tries again next time;
+you can also tap the **mountain icon** (Walls) and **Get the AV wall**.
 
-1. On your phone open https://leanderek.github.io/SprayWall/wall/get.html and download **av-wall.zip**
-   (on an iPhone it goes to the Files app).
-2. In SprayWall tap the **mountain icon** (Walls), then **Import wall pack**, and choose `av-wall.zip`.
-   It takes a few seconds. Your friends' climbs and your own will draw on this wall.
-
-(The same page has `my-climbs.spraywall.json`, a few starter climbs: share icon → **From a file**.)
+* If you do not want the wall, delete it under Walls (the bin) and it will not come back by itself. Add your own wall next to it
+  with **Import wall pack** (see [part 3](#3-making-a-wall-of-your-own)).
+* If you leave the board (**Sync with friends → Stop syncing on this phone**) you are not put back in it.
+* The files are also at https://leanderek.github.io/SprayWall/wall/get.html if you ever want them: `av-wall.zip` for **Import wall
+  pack**, and `my-climbs.spraywall.json`, a few starter climbs (share icon → **From a file**).
 
 ### Find and view climbs
 
@@ -85,11 +90,14 @@ like with the pencil and bin buttons.
 
 There are two ways, and you can use either or both.
 
-**A. Shared board (automatic, needs everyone to have an account)**
+**A. Shared board (automatic, needs an account)**
 
-1. One person taps the **share icon**, then **Sync with friends**, then **Start a board**. They get a **board code** like
-   `k7f2-9xqm-c4ta-p8dn`. **Copy** or **Share** it to friends (the code is the password to the board: only give it to people you trust).
-2. Everyone else taps the share icon, **Sync with friends**, types the code under **Join a friend's board**, and taps **Join**.
+1. **The AV board needs nothing from you:** you join it when the app sets up. Its code is in the app, so anyone who installs SprayWall
+   is on it, and everyone sees everyone's uploaded climbs.
+2. **A private board for a smaller group:** one person taps the **share icon**, then **Sync with friends**, then
+   **Stop syncing on this phone** (you can only be on one board per wall), then **Start a board**. They get a **board code** like
+   `k7f2-9xqm-c4ta-p8dn` to **Copy** or **Share** to friends (the code is the password to that board). Everyone else does the same
+   but types the code under **Join a friend's board** and taps **Join**.
 3. To publish a climb, open your draft and tap **Upload**, then confirm. It goes to the board and appears on everyone's phone
    within moments. **Once a climb is uploaded nobody can edit or delete it, you included**, so check it first.
    Uploaded climbs show a small **Uploaded** tag. Only climbs you made (with your username) can be uploaded.
@@ -143,6 +151,7 @@ There are two ways, and you can use either or both.
 | This source code, tests, tools, README, the database rules | GitHub (public repository) | everyone |
 | The AV wall pack (`wall/av-wall.zip`, a reduced photo with no location data) and starter climbs | GitHub and the website | everyone |
 | The Firebase project id and web API key (`site/src/sync-config.js`) | GitHub | everyone. They are **not secrets**: every phone running the app needs them. The rules decide who may do what |
+| The AV board's code (`site/src/defaults.js`) | GitHub | everyone, **on purpose**: the AV board is open to anyone who installs the app. Boards you start yourself have secret codes |
 | Accounts (usernames; passwords are held by Google) | Firebase | the project owner sees usernames; nobody sees passwords |
 | Boards and uploaded climbs | Firebase | people who have the board's code |
 | Drafts, ratings, sent marks, your wall copy | your device only | you |
@@ -191,8 +200,11 @@ the app cannot get round them. They allow only this:
 * a climb can never be updated or deleted.
 
 This was tested against the real project with hand-made requests (see `tools/firebase_check.py`). What it cannot prevent:
-someone with the board's code who is signed in can upload their own (valid) climbs to it, which is why the code is shared
-only with friends. If a bad climb gets in, only the project owner can remove it, in the Firebase console.
+someone with a board's code who is signed in can upload their own (valid) climbs to it. For a private board that is why the code
+is shared only with friends. **The AV board's code is public on purpose** (so that installing the app is all it takes), which makes
+it an open board: anyone can make an account and upload climbs there, and an uploaded climb is permanent. If an unwanted climb gets
+in, only the project owner can remove it, in the Firebase console (Firestore Database → Data). If the AV board were ever
+flooded, the owner can start a new board and put its code in `site/src/defaults.js`.
 
 ### Offline and updates
 
@@ -325,7 +337,10 @@ free quota):
 3. Put those two values in [`site/src/sync-config.js`](site/src/sync-config.js) and push. (Leave it `null` for an app with no accounts or
    boards: it then only asks for a local username and everything else works.)
 4. Replace the files in `wall/` with your own wall pack and climbs, and the links in this README.
-5. `tools/firebase_check.py` proves your project works end to end (details below).
+5. In [`site/src/defaults.js`](site/src/defaults.js) say which wall every new install starts with (`wall`: its key and the pack's
+   address) and which board it joins (`board`: the wall's key and the board's code, or `null` for none). Start your board in the app
+   first (Sync with friends → Start a board) to get a code.
+6. `tools/firebase_check.py` and `tools/first_run_check.py` prove your project works end to end (details below).
 
 Passwords cannot be reset (no real email addresses are used). To free a username, delete the account under
 **Authentication → Users**.
@@ -339,6 +354,8 @@ site/            the app itself (this is all that is served)
   src/data/      saving (IndexedDB), the database client (firestore.js), syncing (sync.js), wall import
   src/ui/        the screens
   src/sync-config.js   the Firebase project values
+  src/defaults.js      the wall and board every new install starts with
+  src/setup.js         what happens when the app opens: your account, then the default wall and board
 wall/            the AV wall pack, starter climbs and the download page
 firebase/        the database rules
 tests/           the tests (they run in a browser) and a fake Firebase
@@ -354,25 +371,32 @@ in `tools/.venv` with `pip install websocket-client` first.
 | Command | What it does |
 | --- | --- |
 | `python tools/serve.py` | try the app at http://localhost:8080/site/ (tests at /tests/). `--lan` serves only the app to your Wi-Fi |
-| `tools\.venv\Scripts\python.exe tools\run_tests.py` | all unit and screen tests (95 + 35) |
+| `tools\.venv\Scripts\python.exe tools\run_tests.py` | all unit and screen tests (107 + 36) |
 | `... tools\offline_check.py` | installs the app, switches the server off, proves it still works, and tests updates |
 | `... tools\share_check.py` | three separate browser profiles share a link and a file |
+| `... tools\first_run_check.py` | against the **real** project: two brand-new phones open the app, the AV wall and board are set up by themselves (read-only on the board); the test accounts are removed |
 | `... tools\firebase_check.py` | against the **real** Firebase project: accounts, uploads, "no editing or deleting", no uploading under another name. Makes two test accounts and removes them again; leaves a test board |
 | `python tools/stamp.py` | rewrites the offline file list and version (the publishing workflow also does this) |
 | `python tools/make_wall_pack.py` | builds and checks wall packs (part 3) |
 | `... tools\check_modules.py`, `peek_tests.py` | find a script that fails to load, or a test that hangs |
 
-Add `?nosw` to the address to turn the offline copy off while developing and `?nosync` to turn accounts and boards off.
+Add `?nosw` to the address to turn the offline copy off while developing, `?nosync` to turn accounts, boards and the automatic set-up off,
+and `?nodefaults` to turn off only the automatic set-up (the AV wall and board).
 
 ---
 
 ## Questions
 
+**Is the AV board open to everyone?**
+Yes. Its code is built into the app, so everyone who installs SprayWall is on it: they see all uploaded climbs and can upload their
+own (after making an account). Uploads are permanent and carry the uploader's username. If you would rather share climbs with a
+smaller group, **Stop syncing**, then **Start a board** for a private code (or run your own copy, part 4).
+
 **If someone makes their own wall, do their climbs end up in this database?**
 Only if they use *this* app copy and start a board. All boards made through https://leanderek.github.io/SprayWall/ live in the
 same Firebase project (the one used by this app), but each board is separate: it has its own random code, and its climbs are only
-visible to people who have that code. So a stranger's climbs never appear on the AV wall board, and nothing from the AV board
-appears on theirs. They do share the project's free daily limits and the accounts list. Climbs stay on the phone (and are
+visible to people who have that code. So a stranger's own wall climbs never appear on the AV wall board unless they use the AV wall, and nothing from the AV board
+appears on theirs. (Everyone gets the AV wall by default; delete it under Walls if you only want your own.) They do share the project's free daily limits and the accounts list. Climbs stay on the phone (and are
 never sent anywhere) unless the person creates an account, starts a board and taps **Upload**. For a fully separate setup,
 fork the project and use your own Firebase ([part 4](#4-running-your-own-copy-and-developing)).
 
