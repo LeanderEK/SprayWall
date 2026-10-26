@@ -1,6 +1,7 @@
 import { app, wallPicture } from '../app.js';
 import { WallPackError, importWallPack } from '../data/wallimport.js';
 import { DEFAULTS } from '../defaults.js';
+import { facesOf } from '../domain/faces.js';
 import { ZipError } from '../domain/zip.js';
 import { ensureDefaults, installDefaultWall } from '../setup.js';
 import { confirmDialog, filePickerButton, h, iconButton, promptDialog, toast } from './dom.js';
@@ -56,11 +57,12 @@ export async function mountWalls(root) {
         const thumb = h('canvas', { class: 'thumb', style: { width: `${Math.round(72 * aspect)}px`, height: '72px' } });
         queueMicrotask(() => requestAnimationFrame(() => alive && thumb.isConnected && drawThumb(thumb, wall, picture, {}, PAINT.thumbPlain)));
         const angle = wall.angle ? ` · ${wall.angle}°` : '';
+        const faces = facesOf(wall).length;
         return h(
           'div',
           { class: 'row wall-row' },
           thumb,
-          h('div', { class: 'row-text' }, h('div', { class: 'row-name' }, wall.name), h('div', { class: 'row-comment' }, `${wall.holds.length} holds${angle}`)),
+          h('div', { class: 'row-text' }, h('div', { class: 'row-name' }, wall.name), h('div', { class: 'row-comment' }, `${wall.holds.length} holds${faces ? ` · ${faces} faces` : ''}${angle}`)),
           h('input', { type: 'radio', name: 'active', checked: active?.key === wall.key, 'aria-label': `Use ${wall.name}`, onchange: () => repo.setActiveWall(wall.key).then(render) }),
           iconButton('edit', `Rename ${wall.name}`, async () => {
             const name = await promptDialog({ title: 'Rename wall', label: 'Name', value: wall.name, maxLength: 40 });

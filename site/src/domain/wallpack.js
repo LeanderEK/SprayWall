@@ -5,12 +5,16 @@
 //     "name": "AV wall",
 //     "image": "wall.jpg",       the photo's file name inside the zip
 //     "angle": 35,               optional, degrees of overhang
+//     "sections": [ { "name": "Left wall", "angle": 90, "x0": 0, "x1": 0.18 }, ... ]   optional: the faces of a long wall
 //     "holds": [ { "id": 1, "x": 0.231, "y": 0.412, "r": 0.021,
 //                  "outline": [[0.22, 0.40], [0.24, 0.40], [0.25, 0.43]] }, ... ] }
 //
 // x and y are fractions of the photo's width and height from the top-left; r is the hold's radius as a fraction of the
 // photo's width. outline is optional: the corners of a polygon around the hold. Hold ids must stay the same when a wall
 // is updated, because climbs point at holds by id. This is the same format the Android app reads.
+// sections (faces) are for a wall made of several faces laid side by side in one long picture, such as a U-shaped wall flattened
+// into a row. x0 and x1 are where each face starts and ends along the picture (fractions of its width). The app then shows
+// a minimap and a chip for each face, and opens climbs zoomed in on their holds. Walls without sections work as they always did.
 
 export const PACK_FILE_NAME = 'holds.json';
 
@@ -32,6 +36,7 @@ export const RENAMED_WALLS = [
 /** Whether a board made for the wall `boardKey` can be used for the wall `wallKey`: the same key, or the key it had before it was renamed. */
 export const boardFits = (boardKey, wallKey) => boardKey === wallKey || RENAMED_WALLS.some((renamed) => renamed.to === wallKey && renamed.from === boardKey);
 const DEFAULT_RADIUS = 0.02;
+const MAX_FACES = 24;
 
 export class WallPackError extends Error {}
 
@@ -58,7 +63,22 @@ export function parseHoldsJson(text) {
   const holds = parseHolds(root.holds);
   if (holds.length === 0) throw new WallPackError('The "holds" list is empty.');
   const angle = isNumber(root.angle) ? Math.round(root.angle) : null;
-  return { key, name, imageName: image, angle, holds };
+  return { key, name, imageName: image, angle, holds, sections: parseSections(root.sections) };
+}
+
+/** The faces of a long wall, in order along the picture. No `sections` means no faces. */
+export function parseSections(list) {
+  if (list === undefined || list === null) return [];
+  if (!Array.isArray(list)) throw new WallPackError('"sections" must be a list of faces.');
+  if (list.length > MAX_FACES) throw new WallPackError(`A wall can have at most ${MAX_FACES} faces.`);
+  const faces = list.map((item, index) => {
+    const number = index + 1;
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) throw new WallPackError(`Face number ${number} is not an object.`);
+    if (!inUnit(item.x0) || !inUnit(item.x1) || !(item.x0 < item.x1)) throw new WallPackError(`Face number ${number} needs "x0" and "x1" between 0 and 1, with x0 smaller.`);
+    const name = typeof item.name === 'string' ? item.name.trim().slice(0, 30) : '';
+    return { name: name || `Face ${number}`, angle: isNumber(item.angle) ? Math.round(item.angle) : null, x0: item.x0, x1: item.x1 };
+  });
+  return faces.sort((a, b) => a.x0 - b.x0);
 }
 
 export function parseHolds(list) {

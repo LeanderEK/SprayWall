@@ -207,7 +207,7 @@ export class Repo {
    * Adds a wall, or updates the wall with the same key. An update keeps the name you gave the wall and all its climbs.
    * Returns { wall, updated }.
    */
-  async saveWall({ key, name, image, imageWidth, imageHeight, holds, angle }) {
+  async saveWall({ key, name, image, imageWidth, imageHeight, holds, angle, sections = [] }) {
     const existing = await this.getWall(key);
     const wall = {
       key,
@@ -217,6 +217,7 @@ export class Repo {
       imageHeight,
       holds,
       angle: angle ?? null,
+      sections,
       updatedAt: this.now(),
     };
     await this.#put('walls', wall);

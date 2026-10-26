@@ -69,6 +69,10 @@ you can also tap the **mountain icon** (Walls) and **Get the AV wall**.
   * **Pinch** to zoom, drag to move around.
   * The **eye** button shows the whole wall undimmed.
   * The **ⓘ** button shows the grade, who set it, the comment, your rating and when you sent it.
+  * On a **long wall** (one made of several faces, see [part 3](#long-walls-several-faces-side-by-side)) it opens zoomed in on
+    the climb. A small **map** of the whole wall shows where you are (tap or drag on it to go somewhere), a button for each
+    **face** takes you straight there, and the **arrows** next to the map go to the previous or next climb (a swipe moves you
+    about on the wall instead, because you are zoomed in).
 * **Rate it:** in the ⓘ panel tap the stars (tap the same star again to take it away).
 * **Mark it as sent** when you have climbed it: the **Mark sent** button above the climb turns green (**✓ Sent**).
   Tap again to undo. The list shows ✓ Sent and you can filter by it.
@@ -239,7 +243,8 @@ once, then import it on every phone.
 * Even light, no strong shadows. Dark areas can be brightened in any photo editor.
 * Crop it to the board (a little margin is fine). If the board is photographed at an angle, straighten it
   ("perspective correction") so that straight edges look straight: climbs are drawn on this picture exactly as it is.
-* Any size is fine. The app shrinks it to 2600 pixels on the long side when importing.
+* Any size is fine. The app shrinks it to 2600 pixels on the long side when importing (a long wall of several faces may keep up
+  to about 6900 pixels along its length, so each face keeps as much detail).
 * If the board has a sloping and a vertical part, either straighten each part and join them into one picture, or use one flat
   view; the app draws one picture.
 
@@ -302,10 +307,39 @@ A wall pack is a zip containing the photo and a file named exactly `holds.json`:
 | `name` | what people see (you can rename it on each phone later) |
 | `image` | the photo's file name inside the zip (JPEG or PNG) |
 | `angle` | optional, degrees of overhang |
+| `sections` | optional, the faces of a long wall (see below): `[{ "name", "angle", "x0", "x1" }, ...]`, `x0` and `x1` being where the face starts and ends along the picture, as fractions (0 to 1) of its width |
 | `holds[].id` | a whole number, unique in the file. **Climbs point at holds by this number, so never renumber** |
 | `holds[].x`, `y` | the hold's centre as a fraction (0 to 1) of the photo's width and height, from the top-left |
 | `holds[].r` | optional radius as a fraction of the photo's **width** (0 to 0.5; default 0.02) |
 | `holds[].outline` | optional list of at least 3 `[x, y]` corners (fractions) around the hold |
+
+### Long walls: several faces side by side
+
+A wall that is not one flat panel (a U-shaped room, a wall with doors, an overhang next to a vertical wall) can still be **one
+wall pack**. Photograph **each flat face on its own**, straighten each, and join them **side by side in one long picture**, in the
+order you would walk along the wall. Then list the faces in `holds.json`:
+
+```json
+"sections": [
+  { "name": "Left wall",  "angle": 90, "x0": 0,    "x1": 0.21 },
+  { "name": "Overhang",   "angle": 35, "x0": 0.21, "x1": 0.58 },
+  { "name": "Right wall",              "x0": 0.58, "x1": 1 }
+]
+```
+
+With the tool, give the same list in **pixels** along the picture: `--sections sections.json` (see the top of `tools/make_wall_pack.py`).
+The `angle` is optional (it only appears on the face's button); the names appear on the buttons.
+
+**Taking the photos.** One photo per flat face, the camera pointing straight at it (for a steep or overhanging face that means
+square to the face, not level), the face's **four corners in the shot**, in even light. Fold-out doors or panels should be in the
+position you climb with. Straighten each photo ("perspective correction") so the face becomes a rectangle, then give every face
+the **same height** in the joined picture. If the faces are made of standard plywood sheets (for example 2400 x 1200 mm) you can
+use the sheets to make the scale the same everywhere. Holds that continue over a corner belong to the face they are on; climbs
+that cross a corner just use holds on both sides of the divider.
+
+**What the app does differently** for a wall with `sections`: climbs open zoomed in on their holds, a map and a button for each
+face are shown above the wall (see part 1), the list shows each climb's thumbnail cropped round its holds, and the Walls screen
+shows the number of faces. A wall **without** `sections`, like the AV wall, works exactly as it always did.
 
 ### 5. Import it, share it
 
@@ -352,7 +386,7 @@ site/            the app itself (this is all that is served)
   index.html, styles.css, manifest.webmanifest, sw.js (offline copy), icons/
   src/domain/    pure logic: holds, climbs, usernames, sharing format, wall packs, board codes
   src/data/      saving (IndexedDB), the database client (firestore.js), syncing (sync.js), wall import
-  src/ui/        the screens
+  src/ui/        the screens (facebar.js is the map and face buttons of a long wall)
   src/sync-config.js   the Firebase project values
   src/defaults.js      the wall and board every new install starts with
   src/setup.js         what happens when the app opens: your account, then the default wall and board
@@ -371,7 +405,7 @@ in `tools/.venv` with `pip install websocket-client` first.
 | Command | What it does |
 | --- | --- |
 | `python tools/serve.py` | try the app at http://localhost:8080/site/ (tests at /tests/). `--lan` serves only the app to your Wi-Fi |
-| `tools\.venv\Scripts\python.exe tools\run_tests.py` | all unit and screen tests (107 + 36) |
+| `tools\.venv\Scripts\python.exe tools\run_tests.py` | all unit and screen tests (116 + 44) |
 | `... tools\offline_check.py` | installs the app, switches the server off, proves it still works, and tests updates |
 | `... tools\share_check.py` | three separate browser profiles share a link and a file |
 | `... tools\first_run_check.py` | against the **real** project: two brand-new phones open the app, the AV wall and board are set up by themselves (read-only on the board); the test accounts are removed |

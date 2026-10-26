@@ -1,6 +1,6 @@
 """Builds and checks wall packs: the .zip (a wall photo and holds.json) that the app imports under Walls -> Import wall pack.
 
-    python tools/make_wall_pack.py build photo.jpg holds.csv --name "My wall" [--key my-wall] [--angle 20] [--outlines outlines.json] [-o my-wall.zip]
+    python tools/make_wall_pack.py build photo.jpg holds.csv --name "My wall" [--key my-wall] [--angle 20] [--outlines outlines.json] [--sections sections.json] [-o my-wall.zip]
     python tools/make_wall_pack.py check my-wall.zip
 
 holds.csv has one hold per line, positions in PIXELS of the photo measured from its top-left corner:
@@ -17,6 +17,9 @@ or, to give the holds numbers yourself (do this when you update a wall, so exist
 Without an id column the holds are numbered 1, 2, 3... in file order. Lines starting with # are ignored.
 outlines.json (optional) maps a hold's id to the corners of a polygon around it, in pixels: {"17": [[800,1290],[830,1290],[825,1320]]}.
 The pixel numbers are turned into fractions of the photo's width and height, which is what holds.json holds.
+sections.json (optional, for a long wall made of several faces laid side by side in one photo) lists where each face starts and ends along
+the photo, in pixels: [{"name": "Left wall", "angle": 90, "x0": 0, "x1": 1500}, {"name": "Overhang", "angle": 35, "x0": 1500, "x1": 3100}].
+The app then shows a map of the wall and a button for each face, and opens climbs zoomed in on their holds. The angle is optional.
 
 Only the Python standard library is needed. `check` applies the same rules as the app, so a pack that passes it will import.
 """
@@ -78,6 +81,27 @@ def read_holds(path: Path) -> list[dict]:
     return holds
 
 
+def read_sections(path: Path, width: int) -> list[dict]:
+    """The faces of a long wall from a JSON file: x0 and x1 in pixels along the photo, turned into fractions of its width."""
+    try:
+        faces = json.loads(path.read_text(encoding="utf-8-sig"))
+    except ValueError:
+        raise SystemExit(f"{path} is not valid JSON.")
+    if not isinstance(faces, list):
+        raise SystemExit(f"{path} must be a list of faces: [{{\"name\": \"Left wall\", \"x0\": 0, \"x1\": 1500}}, ...]")
+    out = []
+    for number, face in enumerate(faces, start=1):
+        if not isinstance(face, dict) or not all(isinstance(face.get(k), (int, float)) for k in ("x0", "x1")):
+            raise SystemExit(f"Face number {number} in {path} needs numbers \"x0\" and \"x1\" (pixels along the photo).")
+        if not 0 <= face["x0"] < face["x1"] <= width:
+            raise SystemExit(f"Face number {number} in {path} has x0 = {face['x0']} and x1 = {face['x1']}: they must satisfy 0 <= x0 < x1 <= {width} (the photo's width).")
+        item = {"name": str(face.get("name") or f"Face {number}")[:30], "x0": round(face["x0"] / width, 5), "x1": round(face["x1"] / width, 5)}
+        if isinstance(face.get("angle"), (int, float)) and not isinstance(face.get("angle"), bool):
+            item["angle"] = round(face["angle"])
+        out.append(item)
+    return out
+
+
 def build(args) -> None:
     photo = Path(args.photo)
     data = photo.read_bytes()
@@ -97,14 +121,18 @@ def build(args) -> None:
             item["outline"] = [[round(px / width, 5), round(py / height, 5)] for px, py in corners]
         out.append(item)
     key = args.key or slug(args.name)
+    sections = read_sections(Path(args.sections), width) if args.sections else []
     pack = {"version": 1, "key": key, "name": args.name, "image": photo.name if photo.suffix.lower() in (".jpg", ".jpeg", ".png") else "wall.jpg", "holds": out}
     if args.angle is not None:
         pack["angle"] = args.angle
+    if sections:
+        pack["sections"] = sections
     target = Path(args.output or f"{key}.zip")
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("holds.json", json.dumps(pack, separators=(",", ":")))
         z.writestr(pack["image"], data)
-    print(f"Wrote {target}: {len(out)} holds on a {width} x {height} photo, key '{key}', name '{args.name}'.")
+    faces = f", {len(sections)} faces" if sections else ""
+    print(f"Wrote {target}: {len(out)} holds{faces} on a {width} x {height} photo, key '{key}', name '{args.name}'.")
     problems = check_pack(target)
     if problems:
         print("But it has problems:")
@@ -114,6 +142,23 @@ def build(args) -> None:
 
 def in_unit(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 1
+
+
+def check_sections(faces) -> list[str]:
+    """The faces of a long wall, checked the way the app does (none is fine)."""
+    if faces is None:
+        return []
+    if not isinstance(faces, list):
+        return ['"sections" must be a list of faces.']
+    if len(faces) > 24:
+        return ["A wall can have at most 24 faces."]
+    problems = []
+    for number, face in enumerate(faces, start=1):
+        if not isinstance(face, dict):
+            problems.append(f"Face number {number} is not an object.")
+        elif not in_unit(face.get("x0")) or not in_unit(face.get("x1")) or not face["x0"] < face["x1"]:
+            problems.append(f'Face number {number} needs "x0" and "x1" between 0 and 1, with x0 smaller.')
+    return problems
 
 
 def check_pack(path: Path) -> list[str]:
@@ -151,6 +196,7 @@ def check_pack(path: Path) -> list[str]:
             print(f"photo: {width} x {height}")
         except SystemExit as error:
             problems.append(str(error))
+    problems.extend(check_sections(root.get("sections")))
     holds = root.get("holds")
     if not isinstance(holds, list) or not holds:
         problems.append('holds.json needs a non-empty "holds" list.')
@@ -186,6 +232,7 @@ def main() -> int:
     make.add_argument("--key", help="the wall's identity (letters, digits, dashes); default: made from the name. Keep it the same when updating a wall")
     make.add_argument("--angle", type=int, help="degrees of overhang (optional)")
     make.add_argument("--outlines", help="JSON file mapping hold ids to outline corners in pixels (optional)")
+    make.add_argument("--sections", help="JSON file listing the faces of a long wall, with x0 and x1 in pixels along the photo (optional)")
     make.add_argument("-o", "--output", help="the zip to write; default: <key>.zip")
     verify = commands.add_parser("check", help="check a wall pack the way the app does")
     verify.add_argument("pack")

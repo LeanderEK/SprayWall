@@ -1,5 +1,6 @@
 import { app, wallPicture } from '../app.js';
 import { gradeLabel, marksOf } from '../domain/climbs.js';
+import { hasFaces, thumbCrop } from '../domain/faces.js';
 import { ShareError, unpackShare } from '../domain/share.js';
 import { h, isIos, isStandalone, toast } from './dom.js';
 import { appBar } from './list.js';
@@ -39,7 +40,7 @@ export async function mountImporter(root, { payload }) {
   const rows = plan.items.map(({ climb, status }) => {
     const [label, tone] = STATUS_TEXT[status];
     const thumb = h('canvas', { class: 'thumb', style: { width: '56px', height: '72px' } });
-    if (wall) queueMicrotask(() => requestAnimationFrame(() => alive && thumb.isConnected && drawThumb(thumb, wall, picture, marksOf(climb), PAINT.thumb)));
+    if (wall) queueMicrotask(() => requestAnimationFrame(() => alive && thumb.isConnected && drawThumb(thumb, wall, picture, marksOf(climb), PAINT.thumb, thumbCrop(wall, marksOf(climb), 56 / 72))));
     return h('div', { class: 'row static' }, wall ? thumb : null, h('div', { class: 'row-text' }, h('div', { class: 'row-name' }, climb.name), climb.author ? h('div', { class: 'row-author' }, `by ${climb.author}`) : null, h('span', { class: `badge ${tone}` }, label)), h('div', { class: 'row-grade' }, gradeLabel(climb.grade)));
   });
 
@@ -49,6 +50,7 @@ export async function mountImporter(root, { payload }) {
     preview.setWall(wall, picture);
     preview.setPaint(PAINT.climb);
     preview.setMarks(marksOf(plan.items[0].climb));
+    if (hasFaces(wall)) preview.focusOnMarks(marksOf(plan.items[0].climb));
   }
 
   const wallNote = !plan.wallKnown

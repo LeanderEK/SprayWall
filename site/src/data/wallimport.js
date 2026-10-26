@@ -7,6 +7,16 @@ import { findFile, readZip, ZipError } from '../domain/zip.js';
 // along its longer side. Hold positions are fractions of the picture, so shrinking never moves them.
 export const MAX_PHOTO_SIDE = 2600;
 
+/**
+ * The most pixels along the longer side for a picture of this shape. An ordinary wall (up to one and a half times as long as it is
+ * wide) keeps the limit above, so it is exactly as it was. A long wall (a row of faces) gets a longer side, so each face still has
+ * the detail a normal wall has; the area stays at about 12 million pixels at most, which phones handle.
+ */
+export const maxLongSide = (width, height) => {
+  const shape = Math.max(width, height) / Math.max(1, Math.min(width, height));
+  return Math.round(MAX_PHOTO_SIDE * Math.max(1, Math.min(shape, 4) / 1.5));
+};
+
 async function decode(blob) {
   if (globalThis.createImageBitmap) {
     try {
@@ -37,7 +47,7 @@ export async function preparePhoto(blob, name = 'the photo') {
   const sourceW = source.naturalWidth || source.width;
   const sourceH = source.naturalHeight || source.height;
   if (!sourceW || !sourceH) throw new WallPackError(`"${name}" is not a picture this browser can read. Use a JPEG or PNG.`);
-  const scale = Math.min(1, MAX_PHOTO_SIDE / Math.max(sourceW, sourceH));
+  const scale = Math.min(1, maxLongSide(sourceW, sourceH) / Math.max(sourceW, sourceH));
   const width = Math.max(1, Math.round(sourceW * scale));
   const height = Math.max(1, Math.round(sourceH * scale));
   const canvas = document.createElement('canvas');
@@ -70,6 +80,7 @@ export async function importWallPack(file, repo) {
     imageHeight: photo.height,
     holds: pack.holds,
     angle: pack.angle,
+    sections: pack.sections,
   });
   return { wall, updated };
 }

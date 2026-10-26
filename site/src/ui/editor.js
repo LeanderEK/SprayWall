@@ -1,8 +1,10 @@
 import { app, wallPicture } from '../app.js';
 import { MAX_GRADE, gradeLabel, gradeToStop, marksOf, stopToGrade } from '../domain/climbs.js';
+import { hasFaces } from '../domain/faces.js';
 import { formatMarks } from '../domain/holds.js';
 import { ROLES } from '../domain/roles.js';
 import { confirmDialog, h, icon, iconButton, openSheet, toast } from './dom.js';
+import { FaceBar } from './facebar.js';
 import { appBar } from './list.js';
 import { PAINT, WallView } from './wallview.js';
 
@@ -42,6 +44,9 @@ export async function mountEditor(root, { id }) {
   view.setWall(wall, picture);
   view.setPaint(PAINT.editor);
   view.setMarks(state.marks);
+  // On a long wall the editor opens zoomed in: on the climb being changed, or on the first face for a new one.
+  const facebar = hasFaces(wall) ? new FaceBar({ wall, picture, view }) : null;
+  if (facebar) view.focusOnMarks(state.marks);
 
   const undoButton = iconButton('undo', 'Undo', undo);
   const outlinesButton = iconButton('eye', 'Hide hold outlines', toggleOutlines);
@@ -54,7 +59,7 @@ export async function mountEditor(root, { id }) {
     return { ...item, button };
   });
   const panel = h('div', { class: 'brush-panel' }, h('div', { class: 'brush-top' }, hint, clearButton), h('div', { class: 'brush-row' }, brushButtons.map((item) => item.button)));
-  root.append(bar, h('div', { class: 'stage' }, view.el), panel);
+  root.append(bar, ...(facebar ? [facebar.el] : []), h('div', { class: 'stage' }, view.el), panel);
 
   function refresh() {
     hint.textContent = count() === 0 ? 'Pick a type, then tap holds on the wall.' : 'Tap a lit hold again to unlight it.';
@@ -63,6 +68,7 @@ export async function mountEditor(root, { id }) {
     saveButton.disabled = count() === 0;
     for (const item of brushButtons) item.button.classList.toggle('selected', item.code === state.brush);
     view.setMarks(state.marks);
+    facebar?.setMarks(state.marks);
   }
 
   function change(next) {
@@ -151,6 +157,7 @@ export async function mountEditor(root, { id }) {
     guard,
     destroy() {
       if (app.leaveGuard === guard) app.leaveGuard = null;
+      facebar?.destroy();
       view.destroy();
     },
   };

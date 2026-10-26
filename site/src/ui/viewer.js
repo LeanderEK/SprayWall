@@ -1,14 +1,20 @@
 import { app, wallPicture } from '../app.js';
 import { browseIds, gradeLabel, isMine, isUploaded, marksOf } from '../domain/climbs.js';
+import { hasFaces } from '../domain/faces.js';
 import { SyncError } from '../domain/sync.js';
 import { confirmDialog, h, icon, iconButton, openSheet, stars, toast } from './dom.js';
 import { appBar } from './list.js';
 import { copyClimbLink, shareClimbFile, shareClimbLink } from './sharing.js';
 import { askForAccount } from './account.js';
+import { FaceBar } from './facebar.js';
 import { openSyncSheet } from './syncsheet.js';
 import { PAINT, WallView } from './wallview.js';
 
-/** Looking at a climb. Swiping left or right goes to the next or previous climb in the list (with its search, filters and sort). */
+/**
+ * Looking at a climb. Swiping left or right goes to the next or previous climb in the list (with its search, filters and sort).
+ * On a long wall (one with faces) the view opens zoomed in on the climb instead, a drag moves about on the wall, and the
+ * climbs are changed with buttons next to the map of the wall.
+ */
 export async function mountViewer(root, { id }) {
   const { repo, nav } = app;
   const start = await repo.getClimb(id);
@@ -33,11 +39,13 @@ export async function mountViewer(root, { id }) {
   const climbAt = (i) => byId.get(ids[i]);
   const current = () => climbAt(index);
 
+  const long = hasFaces(wall);
   const left = new WallView({ interactive: false });
   const right = new WallView({ interactive: false });
-  const center = new WallView({ pager: { onDrag, onEnd } });
+  const center = new WallView(long ? {} : { pager: { onDrag, onEnd } });
   const views = [left, center, right];
   for (const view of views) view.setWall(wall, picture);
+  const facebar = long ? new FaceBar({ wall, picture, view: center, onPrev: () => go(-1), onNext: () => go(1) }) : null;
   const track = h('div', { class: 'track' }, ...views.map((view) => h('div', { class: 'slide' }, view.el)));
   const pager = h('div', { class: 'pager' }, track);
 
@@ -53,22 +61,24 @@ export async function mountViewer(root, { id }) {
   const sentButton = h('button', { type: 'button', class: 'pill-btn', onclick: toggleSent });
   const uploadSlot = h('div', { class: 'caption-upload' });
   const caption = h('div', { class: 'caption' }, nameEl, uploadSlot, gradeEl);
-  root.append(bar, caption, pager);
+  root.append(bar, caption, ...(facebar ? [facebar.el] : []), pager);
 
   function setTrack(dx, animate) {
     track.style.transition = animate ? 'transform 0.22s ease-out' : 'none';
     track.style.transform = `translate3d(${-width + dx}px, 0, 0)`;
   }
 
-  function fill() {
+  function fill({ refocus = true } = {}) {
     const paint = showWhole ? PAINT.climbBright : PAINT.climb;
     views.forEach((view, slot) => {
       const climb = climbAt(index + slot - 1);
+      const marks = climb ? marksOf(climb) : {};
       view.setPaint(paint);
-      view.setMarks(climb ? marksOf(climb) : {});
+      view.setMarks(marks);
+      if (long && refocus) view.focusOnMarks(marks);
       view.el.parentElement.style.visibility = climb ? 'visible' : 'hidden';
     });
-    center.resetView();
+    if (!long) center.resetView();
   }
 
   function showInfo() {
@@ -83,6 +93,10 @@ export async function mountViewer(root, { id }) {
     sentButton.setAttribute('aria-pressed', String(Boolean(climb.sent)));
     uploadSlot.replaceChildren(sentButton, uploaded ? h('span', { class: 'tag' }, 'Uploaded') : isMine(climb, me) ? h('button', { type: 'button', class: 'pill-btn', onclick: uploadCurrent }, 'Upload') : null);
     count.textContent = ids.length > 1 ? `${index + 1} of ${ids.length}` : '';
+    if (facebar) {
+      facebar.setMarks(marksOf(climb));
+      facebar.setNav({ prev: Boolean(climbAt(index - 1)), next: Boolean(climbAt(index + 1)) });
+    }
     eye.setAttribute('aria-label', showWhole ? 'Dim the wall again' : 'Show the whole wall');
   }
 
@@ -181,7 +195,7 @@ export async function mountViewer(root, { id }) {
 
   function toggleWhole() {
     showWhole = !showWhole;
-    fill();
+    fill({ refocus: !long }); // on a long wall, showing the whole wall should not throw away where you were looking
     showInfo();
     eye.replaceChildren(icon(showWhole ? 'eyeOff' : 'eye'));
   }
@@ -227,6 +241,7 @@ export async function mountViewer(root, { id }) {
     destroy() {
       document.removeEventListener('keydown', onKey);
       observer.disconnect();
+      facebar?.destroy();
       for (const view of views) view.destroy();
     },
   };

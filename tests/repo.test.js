@@ -204,3 +204,14 @@ test('repo: listeners hear about changes', async () => {
   await repo.saveClimb(climbData());
   assert.eq(heard, before);
 });
+
+test('repo: a wall keeps its faces, and a wall saved without any has none', async () => {
+  const { repo } = setup();
+  await repo.saveWall(wallData({ key: 'plain' }));
+  assert.eq((await repo.getWall('plain')).sections, []);
+  const sections = [{ name: 'Left wall', angle: 90, x0: 0, x1: 0.5 }, { name: 'Right panel', angle: null, x0: 0.5, x1: 1 }];
+  await repo.saveWall(wallData({ key: 'long', sections }));
+  assert.eq((await repo.getWall('long')).sections, sections);
+  await repo.saveWall(wallData({ key: 'long', sections: [sections[0]] }));
+  assert.eq((await repo.getWall('long')).sections, [sections[0]], 're-importing a pack replaces its faces');
+});

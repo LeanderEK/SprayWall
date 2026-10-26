@@ -1,4 +1,5 @@
 import { app, wallPicture } from '../app.js';
+import { LONG_THUMB_ASPECT, hasFaces, thumbCrop } from '../domain/faces.js';
 import { MAX_GRADE, SCOPES, SENT_FILTERS, SORTS, applyQuery, defaultQuery, filterCount, gradeFiltered, gradeLabel, isMine, isUploaded, marksOf } from '../domain/climbs.js';
 import { h, icon, iconButton, isIos, isStandalone, openSheet, stars } from './dom.js';
 import { openSharingSheet } from './sharing.js';
@@ -97,10 +98,11 @@ export async function mountList(root) {
       rows.replaceChildren(emptyState('Nothing matches', `${climbs.length} climbs on this wall, but none fit the search and filters.`, 'Clear filters', () => { app.query = { ...defaultQuery(), sort: app.query.sort }; search.value = ''; renderRows(); }));
       return;
     }
-    const aspect = Math.min(2.5, Math.max(0.4, wall.imageWidth / wall.imageHeight));
+    // A long wall (with faces) would make a very wide, tiny picture, so its thumbnails show just the part round the climb.
+    const aspect = hasFaces(wall) ? LONG_THUMB_ASPECT : Math.min(2.5, Math.max(0.4, wall.imageWidth / wall.imageHeight));
     const items = shown.map((climb) => {
       const thumb = h('canvas', { class: 'thumb', style: { width: `${Math.round(THUMB_HEIGHT * aspect)}px`, height: `${THUMB_HEIGHT}px` } });
-      queueMicrotask(() => requestAnimationFrame(() => alive && thumb.isConnected && drawThumb(thumb, wall, picture, marksOf(climb), PAINT.thumb)));
+      queueMicrotask(() => requestAnimationFrame(() => alive && thumb.isConnected && drawThumb(thumb, wall, picture, marksOf(climb), PAINT.thumb, thumbCrop(wall, marksOf(climb), aspect))));
       return h(
         'button',
         { type: 'button', class: 'row', onclick: () => nav.go(`/climb/${climb.id}`) },

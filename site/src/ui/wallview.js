@@ -1,6 +1,7 @@
+import { facesOf, faceRect, hasFaces, marksBounds } from '../domain/faces.js';
 import { hasOutline, litHoldsLargestFirst, nearestHold } from '../domain/holds.js';
 import { roleByCode } from '../domain/roles.js';
-import { Viewport, ZOOM_MAX, ZOOM_MIN } from '../domain/viewport.js';
+import { Viewport, ZOOM_MAX, ZOOM_MIN, zoomMaxFor } from '../domain/viewport.js';
 import { h } from './dom.js';
 
 // How the wall is painted. dim: how much of the photo is darkened so lit holds stand out. spotlight: show lit holds at
@@ -13,6 +14,7 @@ export const PAINT = {
   editorClean: { dim: 0.18, spotlight: false, ring: 3.5, outlineOthers: false },
   thumb: { dim: 0.55, spotlight: true, ring: 1.6, outlineOthers: false },
   thumbPlain: { dim: 0, spotlight: false, ring: 1.6, outlineOthers: false },
+  minimap: { dim: 0.25, spotlight: true, ring: 2.2, outlineOthers: false },
 };
 
 /**
@@ -120,16 +122,28 @@ export function drawWall(ctx, w, h, image, holds, marks, paint, zoom, paths) {
   }
 }
 
-/** Draws a small, fixed picture of a climb (or of the bare wall) into a canvas, for lists. */
-export function drawThumb(canvas, wall, image, marks, paint = PAINT.thumb) {
+/**
+ * Draws a small, fixed picture of a climb (or of the bare wall) into a canvas, for lists. With `crop` (a part of the wall, as
+ * fractions of the picture, with the same shape as the canvas) only that part is shown: a long wall's thumbnail shows where the
+ * climb is instead of the whole wall squeezed small.
+ */
+export function drawThumb(canvas, wall, image, marks, paint = PAINT.thumb, crop = null) {
   const dpr = window.devicePixelRatio || 1;
   const cssW = canvas.clientWidth || canvas.width / dpr;
   const cssH = canvas.clientHeight || canvas.height / dpr;
   canvas.width = Math.max(1, Math.round(cssW * dpr));
   canvas.height = Math.max(1, Math.round(cssH * dpr));
   const ctx = canvas.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  drawWall(ctx, cssW, cssH, image, wall.holds, marks, paint, 1, new HoldPaths(cssW, cssH));
+  if (!crop) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawWall(ctx, cssW, cssH, image, wall.holds, marks, paint, 1, new HoldPaths(cssW, cssH));
+    return;
+  }
+  // The whole wall is laid out so that the cropped part fills the canvas, and the rest falls outside it.
+  const fullW = cssW / (crop.x1 - crop.x0);
+  const fullH = cssH / (crop.y1 - crop.y0);
+  ctx.setTransform(dpr, 0, 0, dpr, -crop.x0 * fullW * dpr, -crop.y0 * fullH * dpr);
+  drawWall(ctx, fullW, fullH, image, wall.holds, marks, paint, 1, new HoldPaths(fullW, fullH));
 }
 
 const TAP_SLOP = 8; // how far a finger can move and still count as a tap, in pixels
@@ -155,7 +169,11 @@ export class WallView {
     this.marks = {};
     this.paint = PAINT.climb;
     this.zoom = 1;
+    this.zoomMax = ZOOM_MAX;
     this.offset = { x: 0, y: 0 };
+    this.pendingFocus = null; // a part of the wall to zoom in on as soon as the view has a size
+    this.autoFocus = null; // the part the view was last asked to show: it is shown again if the view changes size, until you zoom or move it yourself
+    this.onView = null; // called after every draw (the minimap listens, to show what part of the wall is on screen)
     this.pointers = new Map();
     this.gesture = null;
     this.frame = 0;
@@ -177,6 +195,7 @@ export class WallView {
     this.wall = wall;
     this.image = image;
     this.paths = null;
+    this.zoomMax = hasFaces(wall) ? zoomMaxFor(this.aspect) : ZOOM_MAX; // a wall with several faces can be zoomed in further
     this.resetView();
   }
 
@@ -193,7 +212,51 @@ export class WallView {
   resetView() {
     this.zoom = 1;
     this.offset = { x: 0, y: 0 };
+    this.pendingFocus = null;
+    this.autoFocus = null;
     this.invalidate();
+  }
+
+  /** Zooms in on a part of the wall (fractions: { x0, y0, x1, y1 }) as far as fits. It happens as soon as the view has a size. */
+  focusOn(rect, options = {}) {
+    this.pendingFocus = this.autoFocus = { rect, options };
+    this.invalidate();
+  }
+
+  /** Zooms in on the holds a climb lights (not too far for one hold), or on the first face if it lights none. */
+  focusOnMarks(marks) {
+    const bounds = this.wall ? marksBounds(this.wall, marks) : null;
+    if (bounds) this.focusOn(bounds, { maxZoom: Math.min(this.zoomMax, 7) });
+    else if (hasFaces(this.wall)) this.focusFace(0);
+    else this.resetView();
+  }
+
+  /** Zooms in on one face of a long wall: its whole height, as wide as it fits. */
+  focusFace(index) {
+    const face = facesOf(this.wall)[index];
+    if (face) this.focusOn(faceRect(face), { margin: 0.03, maxZoom: this.zoomMax });
+  }
+
+  /** The zoom that showing this part of the wall would take (1 while the view has no size yet). */
+  zoomToFit(rect, options = {}) {
+    const vp = this.#viewport();
+    return vp ? vp.fitRect(rect, { maxZoom: this.zoomMax, ...options }).zoom : 1;
+  }
+
+  /** Moves so that this spot of the wall (fractions) is in the middle, zooming in to at least `minZoom` first. */
+  goTo(nx, ny, minZoom = 1) {
+    const vp = this.#viewport();
+    if (!vp) return;
+    this.pendingFocus = this.autoFocus = null;
+    this.zoom = Math.min(this.zoomMax, Math.max(this.zoom, minZoom));
+    this.offset = vp.centerOn(nx, ny, this.zoom);
+    this.invalidate();
+  }
+
+  /** The part of the wall on screen right now, as fractions of the picture. */
+  visibleRect() {
+    const vp = this.#viewport();
+    return vp ? vp.visibleRect(this.offset, this.zoom) : { x0: 0, y0: 0, x1: 1, y1: 1 };
   }
 
   get aspect() {
@@ -222,6 +285,7 @@ export class WallView {
     const h = this.el.clientHeight;
     if (w === this.size.w && h === this.size.h) return;
     this.size = { w, h };
+    if (this.autoFocus) this.pendingFocus = this.autoFocus; // the page settled into its final layout, or the phone turned: fit again
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = Math.max(1, Math.round(w * dpr));
     this.canvas.height = Math.max(1, Math.round(h * dpr));
@@ -237,8 +301,15 @@ export class WallView {
   }
 
   #draw() {
-    this.el.dataset.zoom = this.zoom.toFixed(2); // for tests and debugging: how far in this view is
     const vp = this.#viewport();
+    if (vp && this.pendingFocus) {
+      const { rect, options } = this.pendingFocus;
+      this.pendingFocus = null;
+      const fit = vp.fitRect(rect, { maxZoom: this.zoomMax, ...options });
+      this.zoom = fit.zoom;
+      this.offset = fit.offset;
+    }
+    this.el.dataset.zoom = this.zoom.toFixed(2); // for tests and debugging: how far in this view is
     const ctx = this.canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -250,6 +321,7 @@ export class WallView {
     ctx.scale(this.zoom, this.zoom);
     ctx.translate(-vp.contentW / 2, -vp.contentH / 2);
     drawWall(ctx, vp.contentW, vp.contentH, this.image, this.wall.holds, this.marks, this.paint, this.zoom, this.paths);
+    this.onView?.();
   }
 
   // ---- touch, mouse and pen ----
@@ -297,11 +369,12 @@ export class WallView {
       const now = this.#pair();
       if (vp && g.dist > 0 && now.dist > 0) {
         const rect = this.canvas.getBoundingClientRect();
-        const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, this.zoom * (now.dist / g.dist)));
+        const newZoom = Math.min(this.zoomMax, Math.max(ZOOM_MIN, this.zoom * (now.dist / g.dist)));
         const focus = { x: g.cx - rect.left, y: g.cy - rect.top };
         const zoomed = vp.zoomAround(focus, this.offset, this.zoom, newZoom);
         this.offset = vp.clamp({ x: zoomed.x + (now.cx - g.cx), y: zoomed.y + (now.cy - g.cy) }, newZoom);
         this.zoom = newZoom;
+        this.autoFocus = this.pendingFocus = null;
         this.invalidate();
       }
       Object.assign(g, now);
@@ -317,6 +390,7 @@ export class WallView {
       if (g.moved) {
         if (this.zoom > 1.001 && vp) {
           this.offset = vp.clamp({ x: this.offset.x + dx, y: this.offset.y + dy }, this.zoom);
+          this.autoFocus = this.pendingFocus = null;
           this.invalidate();
         } else if (g.paging) {
           g.pageDx = totalX;
@@ -379,10 +453,11 @@ export class WallView {
     if (!vp) return;
     e.preventDefault();
     const rect = this.canvas.getBoundingClientRect();
-    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, this.zoom * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015))));
+    const newZoom = Math.min(this.zoomMax, Math.max(ZOOM_MIN, this.zoom * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015))));
     const zoomed = vp.zoomAround({ x: e.clientX - rect.left, y: e.clientY - rect.top }, this.offset, this.zoom, newZoom);
     this.offset = vp.clamp(zoomed, newZoom);
     this.zoom = newZoom;
+    this.autoFocus = this.pendingFocus = null;
     if (this.zoom < 1.02) this.resetView();
     else this.invalidate();
   }

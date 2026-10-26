@@ -1,7 +1,9 @@
 import { assert, test } from './harness.js';
 import * as Outline from '../site/src/domain/outline.js';
 import { formatMarks, holdArea, litHoldsLargestFirst, nearestHold, parseMarks } from '../site/src/domain/holds.js';
-import { Viewport } from '../site/src/domain/viewport.js';
+import { Viewport, ZOOM_MAX, zoomMaxFor } from '../site/src/domain/viewport.js';
+import { MAX_PHOTO_SIDE, maxLongSide } from '../site/src/data/wallimport.js';
+import { cropAround, faceIndexAt, faceLabel, facesOf, hasFaces, marksBounds, thumbCrop } from '../site/src/domain/faces.js';
 import {
   MAX_GRADE, applyQuery, browseIds, cleanWallName, defaultQuery, filterCount, gradeLabel, gradeToStop, stopToGrade,
 } from '../site/src/domain/climbs.js';
@@ -377,4 +379,94 @@ test('zip: reads the real wall pack when it is available', async () => {
   const holds = parseHoldsJson(new TextDecoder().decode(findFile(files, 'holds.json')));
   assert.ok(holds.holds.length > 400, 'expected hundreds of holds');
   assert.ok(findFile(files, holds.imageName).length > 100000, 'expected a real photo');
+});
+
+// ---- walls made of several faces ----
+
+const strip = new Viewport(400, 600, 4); // a long wall in a portrait box: 400 x 100 at zoom 1
+
+test('viewport: fitRect shows a part of the photo as large as fits, centred, within the zoom limits', () => {
+  const tight = strip.fitRect({ x0: 0.5, y0: 0, x1: 0.75, y1: 1 }, { margin: 0 });
+  assert.near(tight.zoom, 4, 1e-6);
+  const seen = strip.visibleRect(tight.offset, tight.zoom);
+  assert.near(seen.x0, 0.5, 1e-6);
+  assert.near(seen.x1, 0.75, 1e-6);
+  assert.eq([seen.y0, seen.y1], [0, 1]);
+  assert.near(strip.fitRect({ x0: 0.5, y0: 0, x1: 0.75, y1: 1 }).zoom, 400 / (100 * 1.24), 1e-6, 'the margin leaves room round it');
+  assert.eq(strip.fitRect({ x0: 0.5, y0: 0.5, x1: 0.501, y1: 0.501 }).zoom, ZOOM_MAX, 'a tiny part stops at the zoom limit');
+  assert.eq(strip.fitRect({ x0: 0.5, y0: 0.5, x1: 0.501, y1: 0.501 }, { maxZoom: 14 }).zoom, 14);
+  assert.eq(strip.fitRect({ x0: 0, y0: 0, x1: 1, y1: 1 }).zoom, 1, 'the whole photo is zoom 1, never less');
+});
+
+test('viewport: centerOn stops at the edges of the photo, and visibleRect is the whole photo when not zoomed', () => {
+  assert.eq(strip.centerOn(0, 0.5, 4).x, 600);
+  assert.eq(strip.centerOn(1, 0.5, 4).x, -600);
+  assert.eq(strip.centerOn(0.5, 0.5, 4), { x: 0, y: 0 });
+  assert.eq(strip.visibleRect({ x: 0, y: 0 }, 1), { x0: 0, y0: 0, x1: 1, y1: 1 });
+  assert.eq(strip.centerOn(NaN, NaN, 2), { x: 0, y: 0 }, 'a broken spot cannot blank the picture');
+});
+
+test('viewport: a long wall can be zoomed in further than an ordinary one', () => {
+  assert.eq([zoomMaxFor(0.77), zoomMaxFor(1), zoomMaxFor(1.5), zoomMaxFor(2)], [ZOOM_MAX, ZOOM_MAX, ZOOM_MAX, ZOOM_MAX]);
+  assert.near(zoomMaxFor(3.5), 10.5);
+  assert.eq(zoomMaxFor(10), 14);
+});
+
+const threeFaces = [{ name: 'Left wall', angle: 90, x0: 0, x1: 0.3 }, { name: 'Overhang', angle: 35, x0: 0.3, x1: 0.7 }, { name: 'Right panel', angle: null, x0: 0.7, x1: 1 }];
+const longWallData = { imageWidth: 1400, imageHeight: 400, sections: threeFaces, holds: [{ id: 1, x: 0.1, y: 0.3, r: 0.01 }, { id: 2, x: 0.9, y: 0.6, r: 0.01, outline: box(0.88, 0.55, 0.92, 0.65) }, { id: 3, x: 0.5, y: 0.5, r: 0.01 }] };
+
+test('faces: a wall has them only if its pack listed them; a position belongs to the nearest face; labels say the angle if known', () => {
+  assert.eq(facesOf({}), []);
+  assert.eq([hasFaces({}), hasFaces({ sections: [] }), hasFaces(longWallData)], [false, false, true]);
+  assert.eq([0.05, 0.5, 0.95, 0].map((x) => faceIndexAt(threeFaces, x)), [0, 1, 2, 0]);
+  const gap = [{ x0: 0, x1: 0.2 }, { x0: 0.5, x1: 1 }];
+  assert.eq([faceIndexAt(gap, 0.3), faceIndexAt(gap, 0.4)], [0, 1], 'between two faces the nearer one wins');
+  assert.eq([faceLabel(threeFaces[0], 0), faceLabel(threeFaces[2], 2), faceLabel({ name: '', x0: 0, x1: 1 }, 1)], ['Left wall 90°', 'Right panel', 'Face 2']);
+});
+
+test('faces: the area a climb uses is round its holds, using outlines when there are some', () => {
+  const bounds = marksBounds(longWallData, { 1: 'start', 2: 'hand' });
+  assert.near(bounds.x0, 0.09, 1e-9);
+  assert.near(bounds.x1, 0.92, 1e-9);
+  assert.near(bounds.y0, 0.3 - 0.01 * 3.5, 1e-9, 'a round hold is as tall as it is wide on screen');
+  assert.near(bounds.y1, 0.65, 1e-9);
+  assert.eq(marksBounds(longWallData, {}), null);
+});
+
+test('faces: a thumbnail crop has the thumbnail shape, holds the climb and stays inside the picture', () => {
+  const photo = 3.5;
+  const shapeOf = (crop) => ((crop.x1 - crop.x0) * photo) / (crop.y1 - crop.y0);
+  const middle = cropAround({ x0: 0.45, y0: 0.4, x1: 0.55, y1: 0.6 }, 0.8, photo);
+  assert.near(shapeOf(middle), 0.8, 1e-9);
+  assert.ok(middle.x0 < 0.45 && middle.x1 > 0.55 && middle.y0 < 0.4 && middle.y1 > 0.6, 'the climb is inside with a margin');
+  const corner = cropAround({ x0: 0, y0: 0, x1: 0.02, y1: 0.05 }, 0.8, photo);
+  assert.ok(corner.x0 === 0 && corner.y0 === 0 && Math.abs(shapeOf(corner) - 0.8) < 1e-9, 'it slides back inside at the edge');
+  const everything = cropAround({ x0: 0, y0: 0, x1: 1, y1: 1 }, 0.8, photo);
+  assert.ok(everything.x0 >= 0 && everything.x1 <= 1 && everything.y0 >= 0 && everything.y1 <= 1);
+  assert.near(shapeOf(everything), 0.8, 1e-9);
+  assert.eq(thumbCrop({ ...longWallData, sections: [] }, { 1: 'start' }, 0.8), null, 'a wall without faces shows the whole wall, as before');
+  const first = thumbCrop(longWallData, {}, 0.8);
+  assert.ok(first.x0 >= 0 && first.x1 < 0.5, 'with no holds it shows the first face');
+});
+
+test('wall pack: faces (sections) are read, sorted and checked', () => {
+  const parsed = parseHoldsJson(pack({ sections: [{ name: ' Overhang ', angle: 34.6, x0: 0.4, x1: 0.8 }, { x0: 0, x1: 0.4 }, { name: 'Right', x0: 0.8, x1: 1 }] }));
+  assert.eq(parsed.sections.map((s) => [s.name, s.angle, s.x0, s.x1]), [['Face 2', null, 0, 0.4], ['Overhang', 35, 0.4, 0.8], ['Right', null, 0.8, 1]]);
+  assert.eq(parseHoldsJson(pack()).sections, []);
+  assert.eq(parseHoldsJson(pack({ sections: [] })).sections, []);
+  packRejected(pack({ sections: 'all' }), 'must be a list');
+  packRejected(pack({ sections: [3] }), 'not an object');
+  packRejected(pack({ sections: [{ x0: 0.5, y: 2, x1: 0.2 }] }), 'x0 smaller');
+  packRejected(pack({ sections: [{ x0: 0, x1: 1.5 }] }), 'between 0 and 1');
+  packRejected(pack({ sections: [{ x0: 0 }] }), 'between 0 and 1');
+  packRejected(pack({ sections: Array.from({ length: 25 }, (_, i) => ({ x0: i / 30, x1: (i + 1) / 30 })) }), 'at most 24');
+});
+
+test('wall photo: an ordinary wall keeps its size limit; a long wall may be longer, with about the same number of pixels', () => {
+  assert.eq(maxLongSide(3507, 4531), MAX_PHOTO_SIDE, 'the AV wall is exactly as before');
+  assert.eq([maxLongSide(100, 100), maxLongSide(1500, 1000), maxLongSide(1000, 1500)], [2600, 2600, 2600]);
+  assert.eq([maxLongSide(4000, 1000), maxLongSide(1000, 4000)], [6933, 6933]);
+  assert.eq(maxLongSide(9000, 1000), 6933, 'there is a limit however long it is');
+  const pixels = maxLongSide(4000, 1000) * (maxLongSide(4000, 1000) / 4);
+  assert.ok(pixels < 12.1e6, `${pixels} pixels`);
 });

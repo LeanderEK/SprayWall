@@ -914,3 +914,232 @@ test('walls: Get the AV wall downloads and adds it, then the button goes away', 
   screen.destroy();
   app.setupHooks = {};
 });
+
+// ---- a long wall: several faces side by side ----
+
+/** A 1400 x 400 wall of three faces side by side (Left wall, Overhang, Right panel), four holds on each, numbered 1 to 12 from the left. */
+async function longWall() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1400;
+  canvas.height = 400;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, 1400, 400);
+  const sections = [{ name: 'Left wall', angle: 90, x0: 0, x1: 0.3 }, { name: 'Overhang', angle: 35, x0: 0.3, x1: 0.7 }, { name: 'Right panel', angle: null, x0: 0.7, x1: 1 }];
+  const holds = [];
+  sections.forEach((face, f) => {
+    for (let row = 0; row < 2; row++) {
+      for (let col = 0; col < 2; col++) {
+        const id = f * 4 + row * 2 + col + 1;
+        const x = face.x0 + (face.x1 - face.x0) * (0.3 + 0.4 * col);
+        const y = 0.3 + 0.4 * row;
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x * 1400 - 12, y * 400 - 12, 24, 24);
+        holds.push({ id, x, y, r: 0.01, outline: [[x - 0.01, y - 0.04], [x + 0.01, y - 0.04], [x + 0.01, y + 0.04], [x - 0.01, y + 0.04]] });
+      }
+    }
+  });
+  const image = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  return { key: 'long-wall', name: 'Long wall', image, imageWidth: 1400, imageHeight: 400, holds, angle: null, sections };
+}
+
+/** A fresh app whose only wall is the long one, with two climbs: "Left one" (holds 1, 4) then "Right one" (holds 9, 12), the newest. */
+async function freshLongApp() {
+  const made = await freshApp({ withWall: false });
+  await made.repo.saveWall(await longWall());
+  const left = await made.repo.saveClimb(climbData({ wallKey: 'long-wall', name: 'Left one', holds: '1:start,4:hand' }));
+  const right = await made.repo.saveClimb(climbData({ wallKey: 'long-wall', name: 'Right one', holds: '9:start,12:hand' }));
+  return { ...made, left, right };
+}
+
+const middleOf = (rect) => (rect.x0 + rect.x1) / 2;
+
+test('long wall: the viewer opens zoomed in on the climb, with a map, a chip for each face and previous and next buttons', async () => {
+  const { root, right } = await freshLongApp();
+  const screen = await mountViewer(root, { id: right.id });
+  const bar = root.querySelector('.facebar');
+  assert.ok(bar, 'a long wall gets the face bar');
+  const order = [...root.children].map((el) => el.className.split(' ')[0]);
+  assert.ok(order.indexOf('facebar') > order.indexOf('caption') && order.indexOf('facebar') < order.indexOf('pager'), `the face bar sits between the strip and the wall (${order})`);
+  const chips = [...bar.querySelectorAll('.face-chip')];
+  assert.eq(chips.map((chip) => chip.textContent), ['Left wall 90°', 'Overhang 35°', 'Right panel']);
+  const center = root.querySelectorAll('.wallview')[1].wallView;
+  center.renderNow();
+  assert.eq(center.pager, null, 'there is no swiping: a drag moves about on the wall');
+  assert.ok(center.zoom > 3, `it opens zoomed in on the climb (zoom ${center.zoom})`);
+  const seen = center.visibleRect();
+  assert.ok(seen.x0 <= 0.78 && seen.x1 >= 0.92 && seen.x0 > 0.5, `the climb is in view ${JSON.stringify(seen)}`);
+  assert.eq(bar.dataset.face, '2');
+  assert.ok(chips[2].classList.contains('selected') && !chips[0].classList.contains('selected'));
+  const prev = root.querySelector('[aria-label="Previous climb"]');
+  const next = root.querySelector('[aria-label="Next climb"]');
+  assert.ok(prev.disabled && !next.disabled, 'this is the newest climb: nothing before it');
+  assert.eq(root.querySelector('.bar-count').textContent, '1 of 2');
+
+  click(next);
+  await wait(600);
+  assert.eq(root.querySelector('.caption-name').textContent, 'Left one');
+  assert.ok(next.disabled && !prev.disabled);
+  const moved = center.visibleRect();
+  assert.ok(moved.x0 <= 0.08 && moved.x1 >= 0.22 && moved.x1 < 0.5, `it moved to the other climb ${JSON.stringify(moved)}`);
+  assert.eq(bar.dataset.face, '0');
+  click(prev);
+  await wait(600);
+  assert.eq(root.querySelector('.caption-name').textContent, 'Right one');
+  assert.eq(bar.dataset.face, '2');
+  screen.destroy();
+});
+
+test('long wall: a drag moves about on the wall without changing the climb', async () => {
+  const { root, right } = await freshLongApp();
+  const screen = await mountViewer(root, { id: right.id });
+  const center = root.querySelectorAll('.wallview')[1].wallView;
+  center.renderNow();
+  const before = middleOf(center.visibleRect());
+  const track = root.querySelector('.track').style.transform;
+  await drag(center.canvas, [100, 300], [300, 300]); // dragging right shows what is to the left
+  center.renderNow();
+  assert.ok(middleOf(center.visibleRect()) < before - 0.02, 'the wall moved');
+  assert.eq(root.querySelector('.track').style.transform, track, 'the climbs did not slide');
+  assert.eq(root.querySelector('.caption-name').textContent, 'Right one');
+  screen.destroy();
+});
+
+test('long wall: a chip goes to its face, and tapping or dragging on the map goes to that spot', async () => {
+  const { root, right } = await freshLongApp();
+  const screen = await mountViewer(root, { id: right.id });
+  const bar = root.querySelector('.facebar');
+  const center = root.querySelectorAll('.wallview')[1].wallView;
+  center.renderNow();
+  const chips = [...bar.querySelectorAll('.face-chip')];
+  click(chips[1]);
+  center.renderNow();
+  assert.near(middleOf(center.visibleRect()), 0.5, 0.01);
+  assert.eq(bar.dataset.face, '1');
+  assert.ok(chips[1].classList.contains('selected') && !chips[2].classList.contains('selected'));
+  const zoomedTo = center.zoom;
+
+  bar.faceBar.layout(); // (a page nobody is looking at gets no resize events)
+  const map = bar.querySelector('.minimap');
+  const rect = map.getBoundingClientRect();
+  assert.ok(rect.width > 100 && Math.abs(rect.width / rect.height - 3.5) < 0.05, `the map has the shape of the wall (${rect.width} x ${rect.height})`);
+  assert.ok(look(bar.querySelector('.minimap-canvas')).painted > 0.5, 'the map is drawn');
+  const y = rect.top + rect.height / 2;
+  tap(map, rect.left + rect.width * 0.75, y);
+  center.renderNow();
+  assert.near(middleOf(center.visibleRect()), 0.75, 0.02);
+  assert.eq(bar.dataset.face, '2');
+  assert.near(center.zoom, zoomedTo, 1e-9, 'moving about on the map keeps how far in you are');
+  const frame = bar.querySelector('.minimap-view').getBoundingClientRect();
+  assert.ok(Math.abs((frame.left + frame.right) / 2 - (rect.left + rect.width * 0.75)) < 3, 'the frame on the map shows where you are');
+
+  await drag(map, [rect.left + rect.width * 0.75, y], [rect.left + rect.width * 0.05, y]);
+  center.renderNow();
+  assert.ok(middleOf(center.visibleRect()) < 0.3, 'dragging along the map slides the wall with it');
+  assert.eq(bar.dataset.face, '0');
+  screen.destroy();
+});
+
+test('long wall: showing the whole wall keeps where you are looking', async () => {
+  const { root, right } = await freshLongApp();
+  const screen = await mountViewer(root, { id: right.id });
+  const center = root.querySelectorAll('.wallview')[1].wallView;
+  center.renderNow();
+  const zoom = center.zoom;
+  const spot = middleOf(center.visibleRect());
+  click(root.querySelector('[aria-label="Show the whole wall"]'));
+  center.renderNow();
+  assert.eq(center.paint.dim, 0);
+  assert.near(center.zoom, zoom, 1e-9);
+  assert.near(middleOf(center.visibleRect()), spot, 1e-9);
+  screen.destroy();
+});
+
+test('long wall: the editor opens on the first face for a new climb and on the climb for an existing one', async () => {
+  const { repo, root, right } = await freshLongApp();
+  await repo.setActiveWall('long-wall');
+  const screen = await mountEditor(root, { id: 'new' });
+  const view = root.querySelector('.wallview').wallView;
+  view.renderNow();
+  const bar = root.querySelector('.facebar');
+  assert.ok(bar && !root.querySelector('[aria-label="Next climb"]'), 'the face bar is there, without climb buttons');
+  assert.ok(view.zoom > 2 && view.visibleRect().x0 === 0 && view.visibleRect().x1 < 0.5, `it opens on the first face ${JSON.stringify(view.visibleRect())}`);
+  assert.eq(bar.dataset.face, '0');
+  const holds = view.wall.holds;
+  tap(view.canvas, ...screenPoint(view, holds[0]));
+  assert.eq(Object.keys(view.marks).length, 1, 'a hold on the zoomed-in face can be tapped');
+  click([...bar.querySelectorAll('.face-chip')][2]);
+  view.renderNow();
+  assert.eq(bar.dataset.face, '2');
+  tap(view.canvas, ...screenPoint(view, holds[8]));
+  assert.eq(Object.keys(view.marks).length, 2, 'and so can one on another face, after going there with its chip');
+  bar.faceBar.layout();
+  assert.ok(look(bar.querySelector('.minimap-canvas')).painted > 0.5);
+  screen.destroy();
+  root.replaceChildren();
+
+  const second = await mountEditor(root, { id: right.id });
+  const again = root.querySelector('.wallview').wallView;
+  again.renderNow();
+  const seen = again.visibleRect();
+  assert.ok(again.zoom > 3 && seen.x0 <= 0.78 && seen.x1 >= 0.92, `an existing climb opens on its holds ${JSON.stringify(seen)}`);
+  second.destroy();
+});
+
+test('long wall: the list shows a portrait thumbnail round each climb, and the Walls screen counts the faces', async () => {
+  const { root } = await freshLongApp();
+  const list = await mountList(root);
+  const thumbs = [...root.querySelectorAll('.row canvas.thumb')];
+  assert.eq(thumbs.length, 2);
+  assert.eq([thumbs[0].style.width, thumbs[0].style.height], ['77px', '96px']);
+  list.destroy();
+  root.replaceChildren();
+  const walls = await mountWalls(root);
+  assert.ok(root.querySelector('.row-comment').textContent.includes('12 holds · 3 faces'), root.querySelector('.row-comment').textContent);
+  walls.destroy();
+});
+
+test('a wall without faces is exactly as before: no face bar, swiping, opens whole', async () => {
+  const { repo, root } = await freshApp();
+  const made = await repo.saveClimb(climbData());
+  await repo.saveClimb(climbData({ name: 'Other' }));
+  const screen = await mountViewer(root, { id: made.id });
+  assert.ok(!root.querySelector('.facebar') && !root.querySelector('.minimap') && !root.querySelector('[aria-label="Next climb"]'));
+  const center = root.querySelectorAll('.wallview')[1].wallView;
+  center.renderNow();
+  assert.ok(center.pager, 'swiping still pages');
+  assert.eq([center.zoom, center.zoomMax], [1, 6]);
+  screen.destroy();
+  root.replaceChildren();
+  const editor = await mountEditor(root, { id: 'new' });
+  const view = root.querySelector('.wallview').wallView;
+  view.renderNow();
+  assert.ok(!root.querySelector('.facebar'));
+  assert.eq(view.zoom, 1);
+  editor.destroy();
+  root.replaceChildren();
+  const list = await mountList(root);
+  const thumb = root.querySelector('.row canvas.thumb');
+  assert.eq([thumb.style.width, thumb.style.height], ['77px', '96px'], 'the 400 x 500 test wall keeps its own thumbnail shape');
+  list.destroy();
+});
+
+test('long wall: the view fits the climb again when the page changes size, until you zoom or move it yourself', async () => {
+  const { root } = await freshLongApp();
+  const screen = await mountEditor(root, { id: 'new' });
+  const view = root.querySelector('.wallview').wallView;
+  view.renderNow();
+  const stageBox = root.querySelector('.stage');
+  const first = view.zoom;
+  stageBox.style.flex = 'none';
+  stageBox.style.height = '200px'; // the layout settles to something smaller
+  view.renderNow();
+  assert.ok(view.zoom < first - 0.5, `it fits the smaller space (zoom ${first} then ${view.zoom})`);
+  assert.ok(view.visibleRect().x0 === 0, 'and still shows the first face');
+  const fitted = view.zoom;
+  await drag(view.canvas, [200, 100], [120, 100]);
+  stageBox.style.height = '320px';
+  view.renderNow();
+  assert.near(view.zoom, fitted, 1e-9, 'once you have moved it yourself it stays as you left it');
+  screen.destroy();
+});
