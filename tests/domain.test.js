@@ -465,8 +465,9 @@ test('wall pack: faces (sections) are read, sorted and checked', () => {
 test('wall photo: an ordinary wall keeps its size limit; a long wall may be longer, with about the same number of pixels', () => {
   assert.eq(maxLongSide(3507, 4531), MAX_PHOTO_SIDE, 'the AV wall is exactly as before');
   assert.eq([maxLongSide(100, 100), maxLongSide(1500, 1000), maxLongSide(1000, 1500)], [2600, 2600, 2600]);
-  assert.eq([maxLongSide(4000, 1000), maxLongSide(1000, 4000)], [6933, 6933]);
-  assert.eq(maxLongSide(9000, 1000), 6933, 'there is a limit however long it is');
-  const pixels = maxLongSide(4000, 1000) * (maxLongSide(4000, 1000) / 4);
-  assert.ok(pixels < 12.1e6, `${pixels} pixels`);
+  assert.eq([maxLongSide(4000, 1000), maxLongSide(1000, 4000)], [6928, 6928]);
+  assert.eq(maxLongSide(9000, 1000), 6928, 'there is a limit however long it is');
+  const long = maxLongSide(5000, 1900);
+  assert.ok(long > 5000 && (long * long) / (5000 / 1900) <= 12_000_000 + 1, `${long} px keeps a 12 million pixel wall within the budget`);
+  assert.ok(maxLongSide(1600, 1000) > maxLongSide(1500, 1000), 'a wall longer than 1.5 gets a bigger budget, and never a smaller one');
 });

@@ -10,11 +10,12 @@ export const MAX_PHOTO_SIDE = 2600;
 /**
  * The most pixels along the longer side for a picture of this shape. An ordinary wall (up to one and a half times as long as it is
  * wide) keeps the limit above, so it is exactly as it was. A long wall (a row of faces) gets a longer side, so each face still has
- * the detail a normal wall has; the area stays at about 12 million pixels at most, which phones handle.
+ * the detail a normal wall has; its area is allowed to reach 12 million pixels, which phones handle.
  */
+export const MAX_LONG_WALL_PIXELS = 12_000_000;
 export const maxLongSide = (width, height) => {
-  const shape = Math.max(width, height) / Math.max(1, Math.min(width, height));
-  return Math.round(MAX_PHOTO_SIDE * Math.max(1, Math.min(shape, 4) / 1.5));
+  const shape = Math.min(4, Math.max(width, height) / Math.max(1, Math.min(width, height)));
+  return shape <= 1.5 ? MAX_PHOTO_SIDE : Math.max(MAX_PHOTO_SIDE, Math.floor(Math.sqrt(MAX_LONG_WALL_PIXELS * shape)));
 };
 
 async function decode(blob) {
