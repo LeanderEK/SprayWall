@@ -16,7 +16,7 @@ import { askForUsername } from '../site/src/ui/username.js';
 import { openSyncSheet } from '../site/src/ui/syncsheet.js';
 import { mountViewer } from '../site/src/ui/viewer.js';
 import { mountWalls } from '../site/src/ui/walls.js';
-import { PAINT, WallView } from '../site/src/ui/wallview.js';
+import { HoldPaths, PAINT, WallView, outlinePad } from '../site/src/ui/wallview.js';
 
 // These tests put the real screens on the page and use them the way a person would: tapping, typing, swiping, pinching.
 // (Pages that are not being looked at do not get their animation frames, so nothing here waits for one.)
@@ -1142,4 +1142,24 @@ test('long wall: the view fits the climb again when the page changes size, until
   view.renderNow();
   assert.near(view.zoom, fitted, 1e-9, 'once you have moved it yourself it stays as you left it');
   screen.destroy();
+});
+
+test('hold rings: an ordinary wall keeps the ring size it always had; a long wall gets a much smaller fixed pad, so its rings hug its small holds', () => {
+  const plain = { sections: [] };
+  const long = { sections: [{ name: 'A', x0: 0, x1: 1 }] };
+  assert.eq([outlinePad(plain, 450), outlinePad(plain, 380), outlinePad(undefined, 450)], [1.5, 1.5, 1.5]);
+  assert.ok(outlinePad(long, 400) > 0 && outlinePad(long, 400) < 0.3, `long wall pad ${outlinePad(long, 400)}`);
+  const hold = { id: 1, x: 0.501, y: 0.502, r: 0.001, outline: [[0.5, 0.5], [0.52, 0.5], [0.52, 0.52], [0.5, 0.52]] }; // 8 x 8 pixels on a 400 x 400 picture, a small hold of a long wall
+  const reach = (pad) => {
+    const paths = new HoldPaths(400, 400, pad);
+    const path = paths.get(hold);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 400;
+    const ctx = canvas.getContext('2d');
+    ctx.lineWidth = 1;
+    let left = 400;
+    for (let x = 150; x <= 210; x += 0.25) if (ctx.isPointInStroke(path, x, 205) || ctx.isPointInPath(path, x, 205)) { left = x; break; }
+    return 200 - left; // how far the ring reaches out beyond the hold's left edge at x = 200
+  };
+  assert.ok(reach(1.5) > reach(outlinePad(long, 400)) + 1, `a ${reach(1.5).toFixed(1)} px reach with the old pad against ${reach(outlinePad(long, 400)).toFixed(1)}`);
 });

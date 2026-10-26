@@ -17,15 +17,24 @@ export const PAINT = {
   minimap: { dim: 0.25, spotlight: true, ring: 2.2, outlineOthers: false },
 };
 
+// How far an outline is pushed out beyond the hold, besides a tenth of the hold's size: a fixed number of pixels of the picture as laid out
+// at zoom 1. 1.5 suits a wall shown about 450 pixels wide with holds 30 to 60 pixels across (the AV wall). A long wall (a row of faces) is
+// laid out just as wide on the screen but its holds are several times smaller there, so a fixed 1.5 pixels would make every ring far too
+// big: its pad is a small share of the picture's width instead.
+const OUTLINE_PAD = 1.5;
+const LONG_WALL_PAD_SHARE = 0.00045;
+export const outlinePad = (wall, width) => (hasFaces(wall) ? LONG_WALL_PAD_SHARE * width : OUTLINE_PAD);
+
 /**
  * The outline of each hold as a drawable path, in the pixels of a w x h picture. A hold's outline is its polygon pushed
  * slightly outwards (so the line sits just outside the hold instead of on its edge), then smoothed so the corners are
  * not sharp. A hold with no outline is a circle. Paths are made once per size and kept.
  */
 export class HoldPaths {
-  constructor(w, h) {
+  constructor(w, h, pad = OUTLINE_PAD) {
     this.w = w;
     this.h = h;
+    this.pad = pad;
     this.paths = new Map();
     this.everyHold = null;
   }
@@ -60,7 +69,7 @@ export class HoldPaths {
     const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
     const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
     const size = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1);
-    const grow = 1 + (0.05 * size + 1.5) / (size / 2);
+    const grow = 1 + (0.05 * size + this.pad) / (size / 2);
     for (let i = 0; i < xs.length; i++) {
       xs[i] = centerX + (xs[i] - centerX) * grow;
       ys[i] = centerY + (ys[i] - centerY) * grow;
@@ -136,14 +145,14 @@ export function drawThumb(canvas, wall, image, marks, paint = PAINT.thumb, crop 
   const ctx = canvas.getContext('2d');
   if (!crop) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawWall(ctx, cssW, cssH, image, wall.holds, marks, paint, 1, new HoldPaths(cssW, cssH));
+    drawWall(ctx, cssW, cssH, image, wall.holds, marks, paint, 1, new HoldPaths(cssW, cssH, outlinePad(wall, cssW)));
     return;
   }
   // The whole wall is laid out so that the cropped part fills the canvas, and the rest falls outside it.
   const fullW = cssW / (crop.x1 - crop.x0);
   const fullH = cssH / (crop.y1 - crop.y0);
   ctx.setTransform(dpr, 0, 0, dpr, -crop.x0 * fullW * dpr, -crop.y0 * fullH * dpr);
-  drawWall(ctx, fullW, fullH, image, wall.holds, marks, paint, 1, new HoldPaths(fullW, fullH));
+  drawWall(ctx, fullW, fullH, image, wall.holds, marks, paint, 1, new HoldPaths(fullW, fullH, outlinePad(wall, fullW)));
 }
 
 const TAP_SLOP = 8; // how far a finger can move and still count as a tap, in pixels
@@ -315,7 +324,7 @@ export class WallView {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     if (!vp) return;
-    if (!this.paths || this.paths.w !== vp.contentW || this.paths.h !== vp.contentH) this.paths = new HoldPaths(vp.contentW, vp.contentH);
+    if (!this.paths || this.paths.w !== vp.contentW || this.paths.h !== vp.contentH) this.paths = new HoldPaths(vp.contentW, vp.contentH, outlinePad(this.wall, vp.contentW));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(vp.boxW / 2 + this.offset.x, vp.boxH / 2 + this.offset.y);
     ctx.scale(this.zoom, this.zoom);
