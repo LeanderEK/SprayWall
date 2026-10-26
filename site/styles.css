@@ -309,3 +309,11 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 8px 0; }
 .spinner { width: 36px; height: 36px; margin: 0 auto; border-radius: 50%; border: 4px solid var(--surface4); border-top-color: var(--text); animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+
+/* a long wall's name and the numbers under it may take two lines rather than being squeezed out */
+.wall-row .row-comment { white-space: normal; }
+/* a long wall's row has a wide thumbnail: when the name and the buttons do not fit beside it the buttons go on a line of their own */
+.wall-row.long { flex-wrap: wrap; row-gap: 2px; }
+.wall-row.long .row-text { flex: 1 1 110px; }
+.wall-controls { display: flex; align-items: center; gap: 4px; margin-left: auto; flex: none; }
+.wall-controls input[type=radio] { margin-right: 10px; }

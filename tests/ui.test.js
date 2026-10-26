@@ -1163,3 +1163,28 @@ test('hold rings: an ordinary wall keeps the ring size it always had; a long wal
   };
   assert.ok(reach(1.5) > reach(outlinePad(long, 400)) + 1, `a ${reach(1.5).toFixed(1)} px reach with the old pad against ${reach(outlinePad(long, 400)).toFixed(1)}`);
 });
+
+test('long wall: on the Walls screen its row fits the screen, with the name and the numbers readable, and the controls together', async () => {
+  const { root } = await freshLongApp();
+  const walls = await mountWalls(root);
+  await wait(150);
+  const row = root.querySelector('.wall-row');
+  assert.ok(row && row.classList.contains('long'));
+  assert.eq(row.querySelectorAll('.wall-controls input[type=radio], .wall-controls .icon-btn').length, 3);
+  assert.ok(row.scrollWidth <= row.clientWidth + 1, `the row does not spill out (${row.scrollWidth} in ${row.clientWidth})`);
+  assert.eq(row.querySelector('.row-name').textContent, 'Long wall');
+  const name = row.querySelector('.row-name');
+  assert.ok(name.scrollWidth <= name.clientWidth + 1, 'the whole name shows, not cut short');
+  assert.ok(row.querySelector('canvas.thumb').getBoundingClientRect().width <= 100, 'the thumbnail is small');
+  walls.destroy();
+});
+
+test('an ordinary wall on the Walls screen keeps its row exactly as before (no long-wall layout)', async () => {
+  const { root } = await freshApp();
+  const walls = await mountWalls(root);
+  await wait(150);
+  const row = root.querySelector('.wall-row');
+  assert.ok(row && !row.classList.contains('long') && !row.querySelector('.wall-controls'));
+  assert.eq(row.querySelector('canvas.thumb').style.height, '72px');
+  walls.destroy();
+});

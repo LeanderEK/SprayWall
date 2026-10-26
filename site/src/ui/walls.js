@@ -54,15 +54,15 @@ export async function mountWalls(root) {
       walls.map(async (wall) => {
         const picture = await wallPicture(wall);
         const aspect = Math.min(2.5, Math.max(0.4, wall.imageWidth / wall.imageHeight));
-        const thumb = h('canvas', { class: 'thumb', style: { width: `${Math.round(72 * aspect)}px`, height: '72px' } });
+        // A long wall (with faces) is much wider than it is tall, so its thumbnail is a small, fixed width, whatever the shape: a wide one
+        // would push the name and the buttons off the screen.
+        const longWall = facesOf(wall).length > 0;
+        const thumbW = longWall ? 92 : Math.round(72 * aspect);
+        const thumb = h('canvas', { class: 'thumb', style: { width: `${thumbW}px`, height: `${longWall ? Math.max(28, Math.round((92 * wall.imageHeight) / wall.imageWidth)) : 72}px` } });
         queueMicrotask(() => requestAnimationFrame(() => alive && thumb.isConnected && drawThumb(thumb, wall, picture, {}, PAINT.thumbPlain)));
         const angle = wall.angle ? ` · ${wall.angle}°` : '';
         const faces = facesOf(wall).length;
-        return h(
-          'div',
-          { class: 'row wall-row' },
-          thumb,
-          h('div', { class: 'row-text' }, h('div', { class: 'row-name' }, wall.name), h('div', { class: 'row-comment' }, `${wall.holds.length} holds${faces ? ` · ${faces} faces` : ''}${angle}`)),
+        const controls = [
           h('input', { type: 'radio', name: 'active', checked: active?.key === wall.key, 'aria-label': `Use ${wall.name}`, onchange: () => repo.setActiveWall(wall.key).then(render) }),
           iconButton('edit', `Rename ${wall.name}`, async () => {
             const name = await promptDialog({ title: 'Rename wall', label: 'Name', value: wall.name, maxLength: 40 });
@@ -76,6 +76,14 @@ export async function mountWalls(root) {
               toast(`Deleted ${wall.name}`);
             }
           }),
+        ];
+        return h(
+          'div',
+          { class: longWall ? 'row wall-row long' : 'row wall-row' },
+          thumb,
+          h('div', { class: 'row-text' }, h('div', { class: 'row-name' }, wall.name), h('div', { class: 'row-comment' }, `${wall.holds.length} holds${faces ? ` · ${faces} faces` : ''}${angle}`)),
+          // on a long wall's row the three controls stay together, and drop to a line of their own if the name and the numbers need the room
+          ...(longWall ? [h('div', { class: 'wall-controls' }, ...controls)] : controls),
         );
       }),
     );
