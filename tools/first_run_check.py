@@ -1,6 +1,7 @@
 """Proves that opening the app for the first time is all anybody has to do, against the REAL Firebase project and the real AV board.
 
-    tools\\.venv\\Scripts\\python.exe tools\\first_run_check.py
+    tools\\.venv\\Scripts\\python.exe tools\\first_run_check.py                                   (the app on this computer)
+    tools\\.venv\\Scripts\\python.exe tools\\first_run_check.py https://leanderek.github.io/SprayWall/   (the published app)
 
 Two brand-new "phones" (separate invisible Chrome profiles) open the app:
   1. one makes an account: the AV wall is downloaded and imported, and the AV board (the code in site/src/defaults.js) is joined,
@@ -30,7 +31,7 @@ def check(condition, message):
         problems.append(message)
 
 
-APP = "const { app } = await import('/site/src/app.js');"
+APP = "const { app } = await import('./src/app.js');"  # relative to the page, so it works on this computer and on the published site
 
 
 def js(phone, body):
@@ -90,10 +91,11 @@ def main():
     ending = "".join(random.choice(string.ascii_lowercase + string.digits) for _ in range(5))
     password = "first-run-pass-1"
     wall_bits = "const w = await app.repo.getWall('av-wall'); return w ? JSON.stringify([w.name, w.holds.length]) : 'none';"
-    server = Server(8096).start()
+    live = sys.argv[1] if len(sys.argv) > 1 else None
+    server = None if live else Server(8096).start()
     new_phone = Browser(port=9343)
     late_phone = Browser(port=9344)
-    base = "http://localhost:8096/site/?nosw=1"
+    base = live or "http://localhost:8096/site/?nosw=1"
     try:
         wall_key, expected, problem = board_climbs(api_key, project, code, password)
         print(f"The AV board holds {expected} climbs (its wall key says {wall_key!r}){' ' + problem if problem else ''}")
@@ -136,7 +138,8 @@ def main():
     finally:
         for phone in (new_phone, late_phone):
             phone.close()
-        server.stop()
+        if server:
+            server.stop()
     print("ALL OK" if not problems else f"{len(problems)} PROBLEM(S)")
     return 1 if problems else 0
 
