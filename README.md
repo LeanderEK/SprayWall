@@ -84,7 +84,7 @@ Your ratings and sent marks are **private**: they stay on your phone and nobody 
 1. On the list tap **Set a climb**.
 2. Pick a hold type at the bottom (**Start**, **Hand**, **Finish**, **Foot**), then **tap every hold** you want to be that type.
    Pick another type and keep tapping. Tap a lit hold again to unlight it; **Erase** removes holds; the **undo** arrow takes
-   back your last tap; the **eye** hides the hold outlines if they get in the way.
+   back your last tap; the **eye** shows a thin white outline round every hold (they are hidden to start with) if you want to see exactly what you can tap.
 3. Tap **Save**, give it a name, set the grade with the slider (or leave it as None), add a comment if you like, and **Save**.
 
 A new climb is a **draft**: it lives only on your phone (the list marks it **Draft**) and you can edit or delete it whenever you

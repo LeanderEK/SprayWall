@@ -35,21 +35,21 @@ export async function mountEditor(root, { id }) {
     grade: existing ? existing.grade : null,
     comment: existing ? existing.comment : '',
     dirty: false,
-    outlines: true,
+    outlines: false, // the thin white outline round every hold is off to start with; the eye button shows it
     saving: false,
   };
   const count = () => Object.keys(state.marks).length;
 
   const view = new WallView({ onTapHold: tap });
   view.setWall(wall, picture);
-  view.setPaint(PAINT.editor);
+  view.setPaint(PAINT.editorClean);
   view.setMarks(state.marks);
   // On a long wall the editor opens zoomed in: on the climb being changed, or on the first face for a new one.
   const facebar = hasFaces(wall) ? new FaceBar({ wall, picture, view }) : null;
   if (facebar) view.focusOnMarks(state.marks);
 
   const undoButton = iconButton('undo', 'Undo', undo);
-  const outlinesButton = iconButton('eye', 'Hide hold outlines', toggleOutlines);
+  const outlinesButton = iconButton('eyeOff', 'Show hold outlines', toggleOutlines);
   const saveButton = h('button', { type: 'button', class: 'text-btn', onclick: openSave }, 'Save');
   const bar = h('header', { class: 'bar' }, iconButton('close', 'Close', leave), h('div', { class: 'bar-title' }, h('div', { class: 'bar-name' }, isNew ? 'New climb' : 'Edit climb')), h('div', { class: 'bar-actions' }, outlinesButton, undoButton, saveButton));
   const hint = h('div', { class: 'brush-hint' });

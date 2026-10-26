@@ -252,11 +252,11 @@ test('editor: the eye button hides and shows the outlines; Clear all empties the
   const { root } = await freshApp();
   await mountEditor(root, { id: 'new' });
   const view = root.querySelector('.wallview').wallView;
+  assert.eq(view.paint.outlineOthers, false, 'the white outlines are hidden to start with');
+  click(root.querySelector('[aria-label="Show hold outlines"]'));
   assert.eq(view.paint.outlineOthers, true);
   click(root.querySelector('[aria-label="Hide hold outlines"]'));
   assert.eq(view.paint.outlineOthers, false);
-  click(root.querySelector('[aria-label="Show hold outlines"]'));
-  assert.eq(view.paint.outlineOthers, true);
   view.renderNow();
   tap(view.canvas, ...screenPoint(view, view.wall.holds[0]));
   assert.eq(Object.keys(view.marks).length, 1);
