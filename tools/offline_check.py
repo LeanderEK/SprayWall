@@ -61,7 +61,7 @@ def part_one():
                 const { app } = await import('/site/src/app.js');
                 const { importWallPack } = await import('/site/src/data/wallimport.js');
                 const { parseShare } = await import('/site/src/domain/share.js');
-                await importWallPack(await (await fetch('/private/work/home-wall.zip')).blob(), app.repo);
+                await importWallPack(await (await fetch('/private/work/av-wall.zip')).blob(), app.repo);
                 const text = await (await fetch('/private/my-climbs.spraywall.json')).text();
                 const plan = await app.repo.planImport(parseShare(text));
                 await app.repo.applyImport(plan);
@@ -89,7 +89,7 @@ def part_one():
         browser.go(f"{base}/site/?nosync=1")
         rows = browser.wait_for("document.querySelectorAll('.row').length", seconds=20, what="the list to appear offline")
         check(rows == 3, f"offline: the app opened from the phone's copy and shows {rows} climbs")
-        check(browser.eval("document.querySelector('.bar-name').textContent") == "Home wall", "offline: the wall's name is there")
+        check(browser.eval("document.querySelector('.bar-name').textContent") == "AV wall", "offline: the wall's name is there")
         thumbs = browser.wait_for(
             """(() => { const c = document.querySelector('canvas.thumb'); if (!c) return 0;
                 const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0;

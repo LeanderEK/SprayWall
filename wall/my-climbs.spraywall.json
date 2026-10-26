@@ -2,8 +2,8 @@
  "format": "spraywall-climbs",
  "version": 1,
  "wall": {
-  "key": "home-wall",
-  "name": "Adrenaline Vault Belmont"
+  "key": "av-wall",
+  "name": "AV wall"
  },
  "climbs": [
   {

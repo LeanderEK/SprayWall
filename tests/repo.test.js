@@ -7,10 +7,10 @@ function setup() {
   const repo = new Repo(new MemoryStore(), () => (time += 1000));
   return { repo, tick: (ms = 1000) => (time += ms), now: () => time };
 }
-const wallData = (over = {}) => ({ key: 'home', name: 'Home wall', image: new Blob(['x']), imageWidth: 100, imageHeight: 200, holds: [{ id: 1, x: 0.5, y: 0.5, r: 0.02, outline: null }], angle: null, ...over });
+const wallData = (over = {}) => ({ key: 'home', name: 'AV wall', image: new Blob(['x']), imageWidth: 100, imageHeight: 200, holds: [{ id: 1, x: 0.5, y: 0.5, r: 0.02, outline: null }], angle: null, ...over });
 const climbData = (over = {}) => ({ wallKey: 'home', name: 'Swoobap', grade: 6, stars: 5, comment: 'fun', holds: '1:hand', ...over });
 const shared = (climbs, wallKey = 'home') =>
-  parseShare({ format: 'spraywall-climbs', version: 1, wall: { key: wallKey, name: 'Home wall' }, climbs }, 1_900_000_000_000);
+  parseShare({ format: 'spraywall-climbs', version: 1, wall: { key: wallKey, name: 'AV wall' }, climbs }, 1_900_000_000_000);
 const wire = (id, over = {}) => ({ id, name: 'Shared', grade: 4, stars: 3, comment: '', author: 'Zeke', holds: '1:start', createdAt: 5000, updatedAt: 9000, ...over });
 
 test('repo: a wall is saved, becomes the active one, and re-importing keeps the name you gave it', async () => {
@@ -18,9 +18,9 @@ test('repo: a wall is saved, becomes the active one, and re-importing keeps the 
   assert.eq(await repo.activeWall(), null);
   const first = await repo.saveWall(wallData());
   assert.eq(first.updated, false);
-  assert.eq((await repo.activeWall()).name, 'Home wall');
+  assert.eq((await repo.activeWall()).name, 'AV wall');
   assert.ok(await repo.renameWall('home', '  The Spray Wall '));
-  const second = await repo.saveWall(wallData({ name: 'Home wall', holds: [{ id: 1, x: 0.1, y: 0.1, r: 0.02, outline: null }, { id: 2, x: 0.2, y: 0.2, r: 0.02, outline: null }] }));
+  const second = await repo.saveWall(wallData({ name: 'AV wall', holds: [{ id: 1, x: 0.1, y: 0.1, r: 0.02, outline: null }, { id: 2, x: 0.2, y: 0.2, r: 0.02, outline: null }] }));
   assert.eq(second.updated, true);
   const wall = await repo.getWall('home');
   assert.eq(wall.name, 'The Spray Wall');
@@ -32,7 +32,7 @@ test('repo: renaming refuses an empty name and an unknown wall', async () => {
   await repo.saveWall(wallData());
   assert.eq(await repo.renameWall('home', '   '), false);
   assert.eq(await repo.renameWall('nowhere', 'Name'), false);
-  assert.eq((await repo.getWall('home')).name, 'Home wall');
+  assert.eq((await repo.getWall('home')).name, 'AV wall');
   await repo.renameWall('home', 'x'.repeat(100));
   assert.eq((await repo.getWall('home')).name.length, 40);
 });

@@ -4,7 +4,7 @@ import {
 } from '../site/src/domain/share.js';
 
 const NOW = 1_800_000_000_000;
-const wall = { key: 'home-wall', name: 'Home wall' };
+const wall = { key: 'av-wall', name: 'AV wall' };
 const climb = (over = {}) => ({
   id: 'b1f3c0de-1111-4222-8333-444455556666',
   name: 'Swoobap',
@@ -21,8 +21,8 @@ const withClimbs = (...climbs) => ({ format: FORMAT, version: 1, wall, climbs })
 test('share: a file round trips exactly', () => {
   const text = shareToText(makeShare(wall, [climb(), climb({ id: 'second-climb-id-0002', name: 'Slab', grade: null })]));
   const parsed = parseShare(text, NOW);
-  assert.eq(parsed.wallKey, 'home-wall');
-  assert.eq(parsed.wallName, 'Home wall');
+  assert.eq(parsed.wallKey, 'av-wall');
+  assert.eq(parsed.wallName, 'AV wall');
   assert.eq(parsed.climbs.length, 2);
   assert.eq(parsed.climbs[0], climb());
   assert.eq(parsed.climbs[1].grade, null);
@@ -100,7 +100,7 @@ test('link: a climb survives being packed into a link and opened again', async (
   assert.ok(link.length < 700, `a one-climb link should be short, it is ${link.length} characters`);
   const parsed = await unpackShare(link, NOW);
   assert.eq(parsed.climbs[0], climb());
-  assert.eq(parsed.wallKey, 'home-wall');
+  assert.eq(parsed.wallKey, 'av-wall');
 });
 
 test('link: it also works when only the code is pasted, with stray spaces and line breaks', async () => {

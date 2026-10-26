@@ -8,8 +8,8 @@ another receive them, signs in to the first account on a second phone, and then 
 with hand-made requests, which the database's rules must refuse. Real browsers enforce the same cross-site rules a phone
 does, so this also proves the database accepts requests from the app.
 
-It leaves the two test accounts (in Authentication -> Users), the test board and its climbs behind: the rules do not allow
-deleting climbs, and accounts are deleted in the Firebase console. Needs private/work/home-wall.zip and
+It removes its two test accounts again when it is done (an account can delete itself). It leaves the test board and its
+climbs behind: the rules do not allow deleting climbs, and nobody has the board's code. Needs private/work/av-wall.zip and
 private/my-climbs.spraywall.json.
 """
 import random
@@ -34,7 +34,7 @@ APP = "const { app } = await import('/site/src/app.js');"
 LOAD_WALL = """(async () => {
     %s
     const { importWallPack } = await import('/site/src/data/wallimport.js');
-    await importWallPack(await (await fetch('/private/work/home-wall.zip')).blob(), app.repo);
+    await importWallPack(await (await fetch('/private/work/av-wall.zip')).blob(), app.repo);
     return true;
 })()""" % APP
 
@@ -48,7 +48,7 @@ LOAD_CLIMBS = """(async () => {
 
 NAMES = """(async () => {
     %s
-    return JSON.stringify((await app.repo.listClimbs('home-wall')).map((c) => c.name).sort());
+    return JSON.stringify((await app.repo.listClimbs('av-wall')).map((c) => c.name).sort());
 })()""" % APP
 
 
@@ -58,11 +58,22 @@ def js(phone, body):
 
 
 def fetch_now(phone):
-    return js(phone, "await app.sync.syncWall('home-wall'); return app.sync.stateOf('home-wall').status;")
+    return js(phone, "await app.sync.syncWall('av-wall'); return app.sync.stateOf('av-wall').status;")
 
 
 def upload(phone, name):
-    return js(phone, "const c = (await app.repo.listClimbs('home-wall')).find((c) => c.name === %r); await app.sync.upload(c.id); return 'uploaded';" % name)
+    return js(phone, "const c = (await app.repo.listClimbs('av-wall')).find((c) => c.name === %r); await app.sync.upload(c.id); return 'uploaded';" % name)
+
+
+def delete_account(phone):
+    """Deletes the account signed in on that phone (the one thing an account may do to itself)."""
+    return js(
+        phone,
+        "const { apiKey } = app.sync.remote.config; "
+        "const response = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:delete?key=' + apiKey, "
+        "{ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: app.sync.remote.auth.idToken }) }); "
+        "return response.status;",
+    )
 
 
 def main():
@@ -95,16 +106,16 @@ def main():
             phone.eval(LOAD_WALL)
         you.eval(LOAD_CLIMBS)
         check(you.eval(NAMES) == '["Circuit no circuit","Swoobap","Under the sea"]', "your phone has your 3 climbs, as drafts")
-        check(js(you, "return (await app.repo.listClimbs('home-wall')).every((c) => c.author === %r);" % alex) is True, "with your username on them")
+        check(js(you, "return (await app.repo.listClimbs('av-wall')).every((c) => c.author === %r);" % alex) is True, "with your username on them")
 
         print("Starting a board on your phone")
-        code = js(you, "return await app.sync.createBoard('home-wall');")
+        code = js(you, "return await app.sync.createBoard('av-wall');")
         check(isinstance(code, str) and len(code) == 16, f"the board was made ({code if str(code).startswith('ERROR') else 'code of 16 characters'})")
         if len(str(code)) != 16:
             return 1
 
         print("Joining from the friend's phone: nothing is uploaded yet")
-        joined = js(friend, "await app.sync.joinBoard('home-wall', %r); return app.sync.stateOf('home-wall').status;" % code)
+        joined = js(friend, "await app.sync.joinBoard('av-wall', %r); return app.sync.stateOf('av-wall').status;" % code)
         check(joined == "ok", f"the friend joined ({joined})")
         check(friend.eval(NAMES) == "[]", "the friend sees no climbs: drafts stay on their maker's phone")
 
@@ -113,23 +124,23 @@ def main():
         check(upload(you, "Circuit no circuit") == "uploaded", "Circuit no circuit was uploaded")
         check(fetch_now(friend) == "ok", "the friend checked for new climbs")
         check(friend.eval(NAMES) == '["Circuit no circuit","Swoobap"]', "the friend got exactly the two uploaded climbs")
-        mine = js(you, "const c = (await app.repo.listClimbs('home-wall')).find((c) => c.name === 'Swoobap'); return JSON.stringify([c.holds, c.grade, c.comment, c.author, !!c.publishedAt]);")
-        same = js(friend, "const c = (await app.repo.listClimbs('home-wall')).find((c) => c.name === 'Swoobap'); return JSON.stringify([c.holds, c.grade, c.comment, c.author, !!c.publishedAt]);")
+        mine = js(you, "const c = (await app.repo.listClimbs('av-wall')).find((c) => c.name === 'Swoobap'); return JSON.stringify([c.holds, c.grade, c.comment, c.author, !!c.publishedAt]);")
+        same = js(friend, "const c = (await app.repo.listClimbs('av-wall')).find((c) => c.name === 'Swoobap'); return JSON.stringify([c.holds, c.grade, c.comment, c.author, !!c.publishedAt]);")
         check(same == mine and f'"{alex}"' in same, f"the friend's copy matches, with {alex} on it")
-        check("cannot be changed" in js(friend, "const c = (await app.repo.listClimbs('home-wall'))[0]; await app.repo.saveClimb({ id: c.id, wallKey: 'home-wall', name: 'x', comment: '', holds: c.holds });"), "the friend's app refuses to edit it")
+        check("cannot be changed" in js(friend, "const c = (await app.repo.listClimbs('av-wall'))[0]; await app.repo.saveClimb({ id: c.id, wallKey: 'av-wall', name: 'x', comment: '', holds: c.holds });"), "the friend's app refuses to edit it")
 
         print("The same account on a second phone")
         other_phone.go(base)
         other_phone.sign_in(alex, password)
         check(js(other_phone, "return await app.repo.authorName();") == alex, "signing in with the username and password works on another phone")
         other_phone.eval(LOAD_WALL)
-        joined = js(other_phone, "await app.sync.joinBoard('home-wall', %r); return app.sync.stateOf('home-wall').status;" % code)
+        joined = js(other_phone, "await app.sync.joinBoard('av-wall', %r); return app.sync.stateOf('av-wall').status;" % code)
         check(joined == "ok" and other_phone.eval(NAMES) == '["Circuit no circuit","Swoobap"]', "and it gets the climbs you uploaded, as yours")
-        check(js(other_phone, "return (await app.repo.listClimbs('home-wall')).every((c) => c.author === %r);" % alex) is True, "with your username on them")
+        check(js(other_phone, "return (await app.repo.listClimbs('av-wall')).every((c) => c.author === %r);" % alex) is True, "with your username on them")
 
         print("What hand-made requests may do (the database's own rules)")
         raw = """
-            const c = (await app.repo.listClimbs('home-wall')).find((c) => c.name === 'Swoobap');
+            const c = (await app.repo.listClimbs('av-wall')).find((c) => c.name === 'Swoobap');
             const { projectId } = app.sync.remote.config;
             const token = app.sync.remote.auth.idToken;
             const base = 'https://firestore.googleapis.com/v1/projects/' + projectId + '/databases/(default)/documents';
@@ -146,7 +157,7 @@ def main():
         result = js(friend, raw)
         check('"patch":403' in result and '"remove":403' in result and '"replace":403' in result, f"editing, deleting and replacing an uploaded climb are all refused ({result})")
         check('"name":"Swoobap"' in result, "and the climb on the board is unchanged")
-        again = js(you, "const c = (await app.repo.listClimbs('home-wall')).find((c) => c.name === 'Swoobap'); return await app.sync.remote.createClimb('%s', c.id, { name: 'Again', author: %r, holds: c.holds, createdAt: Date.now() });" % (code, alex))
+        again = js(you, "const c = (await app.repo.listClimbs('av-wall')).find((c) => c.name === 'Swoobap'); return await app.sync.remote.createClimb('%s', c.id, { name: 'Again', author: %r, holds: c.holds, createdAt: Date.now() });" % (code, alex))
         check("exists" in again, f"adding the same climb again is refused ({again.strip()[:80]})")
         passing_off = js(friend, "return await app.sync.remote.createClimb('%s', 'passing-off-0001', { name: 'Not mine', author: %r, holds: '1:hand', createdAt: Date.now() });" % (code, alex))
         check("denied" in passing_off, f"{bea} cannot upload a climb under {alex}'s name")
@@ -155,25 +166,25 @@ def main():
             check("denied" in refused, f"the rules refuse {label}")
 
         print("The friend's own climb comes the other way")
-        js(friend, "await app.repo.saveClimb({ wallKey: 'home-wall', name: 'Friend climb', grade: 5, comment: 'made on the other phone', holds: '1:start,2:hand,3:finish' });")
+        js(friend, "await app.repo.saveClimb({ wallKey: 'av-wall', name: 'Friend climb', grade: 5, comment: 'made on the other phone', holds: '1:start,2:hand,3:finish' });")
         check(upload(friend, "Friend climb") == "uploaded", "the friend uploaded their climb")
         check(fetch_now(you) == "ok", "your phone checked for new climbs")
         names = you.eval(NAMES)
         check(names == '["Circuit no circuit","Friend climb","Swoobap","Under the sea"]', f"it arrived on your phone ({names})")
-        check(f'"{bea}"' in js(you, "const c = (await app.repo.listClimbs('home-wall')).find((c) => c.name === 'Friend climb'); return JSON.stringify(c.author);"), f"with {bea}'s name on it")
+        check(f'"{bea}"' in js(you, "const c = (await app.repo.listClimbs('av-wall')).find((c) => c.name === 'Friend climb'); return JSON.stringify(c.author);"), f"with {bea}'s name on it")
 
         print("Ratings and sent marks stay on each phone")
-        js(you, "const c = (await app.repo.listClimbs('home-wall')).find((c) => c.name === 'Swoobap'); await app.repo.setRating(c.id, 5); await app.repo.setSent(c.id);")
+        js(you, "const c = (await app.repo.listClimbs('av-wall')).find((c) => c.name === 'Swoobap'); await app.repo.setRating(c.id, 5); await app.repo.setSent(c.id);")
         fetch_now(friend)
         fetch_now(other_phone)
         for phone, who in ((friend, "the friend"), (other_phone, "your other phone")):
-            seen = js(phone, "const c = (await app.repo.listClimbs('home-wall')).find((c) => c.name === 'Swoobap'); return JSON.stringify([await app.repo.getRating(c.id), await app.repo.getSentAt(c.id)]);")
+            seen = js(phone, "const c = (await app.repo.listClimbs('av-wall')).find((c) => c.name === 'Swoobap'); return JSON.stringify([await app.repo.getRating(c.id), await app.repo.getSentAt(c.id)]);")
             check(seen == "[0,0]", f"{who} does not get your 5 stars or your sent mark")
 
         print("Signing out and in")
         js(friend, "await app.sync.signOut();")
         check(js(friend, "return await app.sync.account();") is None, "signed out")
-        check(js(friend, "await app.sync.syncWall('home-wall');").startswith("ERROR signin"), "and nothing can be fetched until signing in again")
+        check(js(friend, "await app.sync.syncWall('av-wall');").startswith("ERROR signin"), "and nothing can be fetched until signing in again")
         check(js(friend, "await app.sync.signIn(%r, %r); return (await app.sync.account()).username;" % (bea, password)) == bea, "signing in again works")
 
         print("Nothing new")
@@ -181,6 +192,9 @@ def main():
 
         errors = you.console_errors() + friend.console_errors() + other_phone.console_errors()
         check(not errors, f"no errors in any browser ({len(errors)}) {errors[:2]}")
+
+        print("Cleaning up")
+        check(delete_account(you) == 200 and delete_account(friend) == 200, "the two test accounts were removed again")
     finally:
         for phone in (you, friend, other_phone):
             phone.close()

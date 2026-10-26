@@ -23,7 +23,7 @@ def check(condition, message):
 LOAD_WALL = """(async () => {
     const { app } = await import('/site/src/app.js');
     const { importWallPack } = await import('/site/src/data/wallimport.js');
-    await importWallPack(await (await fetch('/private/work/home-wall.zip')).blob(), app.repo);
+    await importWallPack(await (await fetch('/private/work/av-wall.zip')).blob(), app.repo);
     return true;
 })()"""
 
@@ -57,8 +57,8 @@ def main():
             """(async () => {
                 const { app } = await import('/site/src/app.js');
                 const { makeShare, packShare, linkFor } = await import('/site/src/domain/share.js');
-                const wall = await app.repo.getWall('home-wall');
-                const climb = (await app.repo.listClimbs('home-wall')).find((c) => c.name === 'Swoobap');
+                const wall = await app.repo.getWall('av-wall');
+                const climb = (await app.repo.listClimbs('av-wall')).find((c) => c.name === 'Swoobap');
                 return linkFor('https://example.github.io/spraywall/', await packShare(makeShare(wall, [climb])));
             })()"""
         )
@@ -76,14 +76,14 @@ def main():
         same = friend.eval(
             """(async () => {
                 const { app } = await import('/site/src/app.js');
-                const mine = (await app.repo.listClimbs('home-wall'))[0];
+                const mine = (await app.repo.listClimbs('av-wall'))[0];
                 return JSON.stringify({ holds: mine.holds, grade: mine.grade, comment: mine.comment });
             })()"""
         )
         original = you.eval(
             """(async () => {
                 const { app } = await import('/site/src/app.js');
-                const mine = (await app.repo.listClimbs('home-wall')).find((c) => c.name === 'Swoobap');
+                const mine = (await app.repo.listClimbs('av-wall')).find((c) => c.name === 'Swoobap');
                 return JSON.stringify({ holds: mine.holds, grade: mine.grade, comment: mine.comment });
             })()"""
         )
@@ -100,7 +100,7 @@ def main():
             """(async () => {
                 const { app } = await import('/site/src/app.js');
                 const { makeShare, shareToText } = await import('/site/src/domain/share.js');
-                return shareToText(makeShare(await app.repo.getWall('home-wall'), await app.repo.listClimbs('home-wall')));
+                return shareToText(makeShare(await app.repo.getWall('av-wall'), await app.repo.listClimbs('av-wall')));
             })()"""
         )
         friend.go(base)

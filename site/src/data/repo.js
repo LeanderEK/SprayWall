@@ -1,5 +1,6 @@
 import { MAX_STARS, USERNAME_HELP, cleanUsername, cleanWallName, isMine, sameName } from '../domain/climbs.js';
 import { makeShare } from '../domain/share.js';
+import { RENAMED_WALLS } from '../domain/wallpack.js';
 
 // Everything the app remembers, behind one object. It talks to a "store" with four calls (get, put, remove, all) over
 // three tables: walls (keyed by `key`), climbs (keyed by `id`) and meta (keyed by `k`). The real app uses IndexedDB
@@ -165,11 +166,12 @@ export class Repo {
   }
 
   /**
-   * Brings data from before ratings were separate up to date: a climb's own `stars` becomes your rating of it, and the field
-   * goes. Safe to run every time the app starts. Returns how many climbs it touched.
+   * Brings older data up to date. A climb's own `stars` becomes your rating of it and the field goes; a wall saved under a key
+   * that has since been renamed (see RENAMED_WALLS) moves to the new key, with its climbs, its board and its place as the
+   * wall you climb on. Safe to run every time the app starts. Returns how many records it touched.
    */
   async upgradeData() {
-    let touched = 0;
+    let touched = await this.#moveRenamedWalls();
     for (const climb of await this.store.all('climbs')) {
       if (!('stars' in climb)) continue;
       const { stars, ...rest } = climb;
@@ -296,6 +298,25 @@ export class Repo {
     await this.#put('climbs', published);
     this.#changed();
     return published;
+  }
+
+  async #moveRenamedWalls() {
+    let touched = 0;
+    for (const { from, to, fromName, toName, isTheSameWall } of RENAMED_WALLS) {
+      const wall = await this.store.get('walls', from);
+      if (!wall || !isTheSameWall(wall) || (await this.store.get('walls', to))) continue; // nothing to move, another wall that has this key, or the new one is already there
+      await this.#put('walls', { ...wall, key: to, name: wall.name === fromName ? toName : wall.name });
+      await this.store.remove('walls', from);
+      for (const climb of await this.store.all('climbs')) if (climb.wallKey === from) await this.#put('climbs', { ...climb, wallKey: to });
+      const board = await this.getMeta(`sync:${from}`);
+      if (board) {
+        await this.setMetaQuietly(`sync:${to}`, board);
+        await this.store.remove('meta', `sync:${from}`);
+      }
+      if ((await this.getMeta('activeWall')) === from) await this.setMetaQuietly('activeWall', to);
+      touched++;
+    }
+    return touched;
   }
 
   // ---- the shared board (the steps are in sync.js) ----

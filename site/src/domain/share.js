@@ -4,7 +4,7 @@ import { formatMarks, parseMarks } from './holds.js';
 // Sharing climbs. Climbs travel as a small piece of JSON, either in a file or packed into a link.
 //
 //   { "format": "spraywall-climbs", "version": 1,
-//     "wall": { "key": "home-wall", "name": "Home wall" },
+//     "wall": { "key": "av-wall", "name": "AV wall" },
 //     "climbs": [ { "id", "name", "grade", "comment", "author", "holds", "createdAt", "updatedAt" } ] }
 //
 // A star rating is not shared: each person rates climbs on their own phone. (Files made before that still say "stars"; it is ignored.)

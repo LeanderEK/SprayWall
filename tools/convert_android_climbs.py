@@ -14,7 +14,8 @@ import tempfile
 import uuid
 from pathlib import Path
 
-WALL_KEY = "home-wall"
+WALL_KEY = "av-wall"
+ID_SEED = "home-wall"  # the key the wall had when the ids were first made: never change it, or every climb would get a new id
 NAMESPACE = uuid.UUID("5f0c3a53-8e57-4d0c-a5a6-0d53b3d8c6a1")  # only ever used to make the same ids from the same climbs
 
 
@@ -30,7 +31,7 @@ def main() -> None:
     rows = con.execute("select id, name, grade, stars, comment, holds, createdAt, updatedAt from climbs order by id").fetchall()
     climbs = [
         {
-            "id": str(uuid.uuid5(NAMESPACE, f"{WALL_KEY}/{row[0]}")),
+            "id": str(uuid.uuid5(NAMESPACE, f"{ID_SEED}/{row[0]}")),
             "name": row[1],
             "grade": row[2],
             "comment": row[4] or "",

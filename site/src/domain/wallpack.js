@@ -1,8 +1,8 @@
 // The `holds.json` file inside a wall pack (a .zip with this file and the wall photo):
 //
 //   { "version": 1,
-//     "key": "home-wall",        optional; importing the same key again updates that wall in place
-//     "name": "Home wall",
+//     "key": "av-wall",          optional; importing the same key again updates that wall in place
+//     "name": "AV wall",
 //     "image": "wall.jpg",       the photo's file name inside the zip
 //     "angle": 35,               optional, degrees of overhang
 //     "holds": [ { "id": 1, "x": 0.231, "y": 0.412, "r": 0.021,
@@ -13,6 +13,24 @@
 // is updated, because climbs point at holds by id. This is the same format the Android app reads.
 
 export const PACK_FILE_NAME = 'holds.json';
+
+// A wall that was given a new key. Only the one wall is moved: a "home-wall" that somebody else made is a different wall
+// that happens to have the same key, so it is told apart by its holds (`isTheSameWall`) and left alone.
+//   - a phone that saved the wall under the old key moves it to the new key (Repo.upgradeData);
+//   - a board that was made under the old key can still be joined for the renamed wall (boardFits).
+export const RENAMED_WALLS = [
+  {
+    from: 'home-wall',
+    to: 'av-wall',
+    fromName: 'Home wall',
+    toName: 'AV wall',
+    // 524 holds, numbered up to 602, whose numbers add up to 161422
+    isTheSameWall: (wall) => wall.holds.length === 524 && Math.max(...wall.holds.map((hold) => hold.id)) === 602 && wall.holds.reduce((sum, hold) => sum + hold.id, 0) === 161422,
+  },
+];
+
+/** Whether a board made for the wall `boardKey` can be used for the wall `wallKey`: the same key, or the key it had before it was renamed. */
+export const boardFits = (boardKey, wallKey) => boardKey === wallKey || RENAMED_WALLS.some((renamed) => renamed.to === wallKey && renamed.from === boardKey);
 const DEFAULT_RADIUS = 0.02;
 
 export class WallPackError extends Error {}

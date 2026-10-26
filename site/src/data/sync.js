@@ -1,4 +1,5 @@
 import { USERNAME_HELP, cleanUsername, isUploaded, sameName } from '../domain/climbs.js';
+import { boardFits } from '../domain/wallpack.js';
 import { MIN_PASSWORD, SyncError, cleanPassword, cleanRemote, makeBoardCode, parseBoardCode, stampValue, toRecord } from '../domain/sync.js';
 
 // A wall's shared board. Everything works on the phone first; the board is only visited when there is a connection.
@@ -140,7 +141,7 @@ export class SyncService {
     const code = parseBoardCode(text);
     const board = await this.remote.getBoard(code);
     if (!board) throw new SyncError('notfound', 'There is no board with that code. Check it and try again.');
-    if (board.wallKey !== wallKey) {
+    if (!boardFits(board.wallKey, wallKey)) {
       throw new SyncError('wall', `That board is for the wall “${board.wallName || board.wallKey}”, not this one. Open that wall first (or import its wall pack).`);
     }
     await this.#begin(wallKey, code);

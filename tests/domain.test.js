@@ -226,7 +226,7 @@ test('grade labels and the slider mapping', () => {
 });
 
 test('wall names are trimmed and capped; empty is refused', () => {
-  assert.eq(cleanWallName('  Home wall \n'), 'Home wall');
+  assert.eq(cleanWallName('  AV wall \n'), 'AV wall');
   assert.eq(cleanWallName('x'.repeat(100)).length, 40);
   assert.eq(cleanWallName('A' + ' '.repeat(60) + 'B'), 'A');
   assert.eq(cleanWallName(''), null);
@@ -235,13 +235,13 @@ test('wall names are trimmed and capped; empty is refused', () => {
 
 // ---- wall pack file (holds.json) ----
 
-const pack = (over = {}) => JSON.stringify({ version: 1, key: 'home', name: 'Home wall', image: 'wall.jpg', holds: [{ id: 1, x: 0.25, y: 0.5, r: 0.02 }, { id: 2, x: 0.75, y: 0.1 }], ...over });
+const pack = (over = {}) => JSON.stringify({ version: 1, key: 'home', name: 'AV wall', image: 'wall.jpg', holds: [{ id: 1, x: 0.25, y: 0.5, r: 0.02 }, { id: 2, x: 0.75, y: 0.1 }], ...over });
 const packRejected = (text, part) => assert.throws(() => parseHoldsJson(text), part);
 
 test('wall pack: reads a good pack, with defaults', () => {
   const parsed = parseHoldsJson(pack({ angle: 35 }));
   assert.eq(parsed.key, 'home');
-  assert.eq(parsed.name, 'Home wall');
+  assert.eq(parsed.name, 'AV wall');
   assert.eq(parsed.imageName, 'wall.jpg');
   assert.eq(parsed.angle, 35);
   assert.eq(parsed.holds.length, 2);
@@ -371,7 +371,7 @@ test('zip: rejects things that are not zips, and damaged or lying zips', async (
 });
 
 test('zip: reads the real wall pack when it is available', async () => {
-  const response = await fetch('/private/work/home-wall.zip');
+  const response = await fetch('/private/work/av-wall.zip');
   if (!response.ok) return; // only on the machine that has it
   const files = await readZip(await response.arrayBuffer());
   const holds = parseHoldsJson(new TextDecoder().decode(findFile(files, 'holds.json')));

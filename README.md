@@ -1,204 +1,401 @@
-# SprayWall (web version, for iPhone, iPad and anything else)
+# SprayWall
 
-The same idea as the Android SprayWall app: pick the holds of a climb on your own wall photo, give it a grade and a
-comment, browse and filter the climbs, rate them with stars. This version is a web app that you put on your Home Screen.
-After the first visit **everything is saved on the device and it works with no signal**: the app, the wall photo and the climbs.
+Set climbs on your spray wall from your phone. Tap the holds on a photo of the wall, give the climb a grade, and keep it as a
+draft or upload it for your friends. Works on iPhone, iPad, Android and computers, costs nothing, needs no app store, and
+**works with no signal** once it has been opened once.
 
-Climbs can be shared as a **link** or a **file**, and (once a Firebase project is set up, see "Shared boards" below) uploaded
-to a **shared board** that friends' phones receive automatically.
+* **The app:** https://leanderek.github.io/SprayWall/
+* **The AV wall (Adrenaline Vault) and its climbs, to download:** https://leanderek.github.io/SprayWall/wall/get.html
 
-Every user has an **account**: a unique username (3 to 20 lowercase letters, digits, dashes or underscores) and a password,
-made the first time the app opens (with a Firebase project set up; without one the app just asks for a name). Signing in
-with them works on any phone. The username goes on every climb the user makes.
-A new climb is a **draft**: only on that phone, and it can be edited and deleted. Pressing **Upload** on it puts it on
-the shared board, after which **nobody can edit or delete it** (the database's rules allow only adding), and the database
-only accepts a climb whose author is the account that uploads it. **Star ratings** and **"sent" marks** (completed climbs)
-are private: each person keeps their own on their own phone and they are never shared.
+This page has four parts: [using the app](#1-using-the-app), [how it works](#2-how-it-works),
+[making a wall of your own](#3-making-a-wall-of-your-own) and [running your own copy](#4-running-your-own-copy-and-developing).
+Common questions are answered at the [end](#questions).
 
-Your Android app is separate and untouched. The two apps do not talk to each other, but the same climbs can be moved
-between them by file (see "Moving your Android climbs").
+---
 
-## What goes online and what does not
+## 1. Using the app
 
-The app itself (the **`site`** folder) holds no wall photo, no hold map and no climbs.
+### Install it (30 seconds)
 
-The wall pack and the climbs are in the **`wall`** folder of this repository, on purpose and public (the owner said that
-is fine): `wall/home-wall.zip` (photo and 524 holds) and `wall/my-climbs.spraywall.json`. The publish step also puts them
-on the live site, with a small download page at `https://leanderek.github.io/SprayWall/wall/get.html`. They are not
-saved with the app for offline use; you load them into the app once per device from a file.
+| Device | What to do |
+| --- | --- |
+| **iPhone / iPad** (iOS 16.4 or newer) | Open the address above in **Safari**. Tap **Share**, then **Add to Home Screen**, then **Add**. Open SprayWall from the new icon. |
+| **Android** | Open the address in **Chrome**. Tap the **⋮** menu, then **Install app** (or **Add to Home screen**). |
+| **Computer** | Just open the address in Chrome, Edge or Safari. (Chrome and Edge can also install it from the address bar.) |
 
-The working copies stay in `private/` (`private/work/home-wall.zip`, `private/my-climbs.spraywall.json`, not in the
-repository). When you export a new wall pack or a newer climbs file, copy it over the one in `wall/` and push.
-`private/` also holds the hand-editing and test files that are never published.
+Open it once with a connection and give it a few seconds: it saves itself on the device. From then on it opens with no signal
+at all (try aeroplane mode). When a new version is out it says **A new version of SprayWall is ready**; tap **Update**.
 
-## 1. Put the app on the internet (once)
+> iPhone / iPad: use the Home Screen icon every time. Safari tabs and the Home Screen app keep **separate** data, so climbs
+> made in one do not appear in the other.
 
-The app has to come from an `https://` address the first time, because that is what lets a phone save it for offline
-use. After that first visit the phone no longer needs the address.
+### Make your account
 
-Any free static web host will do. The two easiest:
+The first time it opens, SprayWall asks you to create an account: a **username** and a **password**.
 
-**GitHub Pages** (how this project is set up: github.com/LeanderEK/SprayWall)
-1. The whole project is in the repository (a free account needs it to be public; the wall pack and climbs in `wall/` are public too, on purpose).
-   `.github/workflows/pages.yml` publishes the `site` folder and the `wall` downloads.
-2. Once: repository Settings → Pages → Build and deployment → Source: **GitHub Actions**.
-3. Every push to `main` publishes again (Actions tab shows the progress). The app is at
-   `https://leanderek.github.io/SprayWall/`.
+* The username is **yours alone** (nobody else can have it), 3 to 20 letters, digits, dashes or underscores, always lowercase.
+  It is shown on every climb you upload.
+* The password needs at least 8 characters. **There is no way to reset a lost password**, so pick one you will remember
+  (a password manager helps). If you do lose it, ask the person who runs the project to delete your account; you can then
+  make it again with the same username, and the climbs you uploaded count as yours again.
+* The same username and password sign you in on **any** phone: on the new phone choose **I already have an account**.
+* You need a connection for this step only. Everything else works offline.
 
-**Netlify (drag and drop)**: go to app.netlify.com/drop and drag the `site` folder onto the page. It gives you an
-address straight away. Cloudflare Pages has the same kind of upload.
+### Load the wall
 
-Check the host's current free terms before relying on it; they change.
+A **wall** is a photo of the board plus a map of where every hold is. The AV wall is ready to download:
 
-## 2. Install it on each device
+1. On your phone open https://leanderek.github.io/SprayWall/wall/get.html and download **av-wall.zip**
+   (on an iPhone it goes to the Files app).
+2. In SprayWall tap the **mountain icon** (Walls), then **Import wall pack**, and choose `av-wall.zip`.
+   It takes a few seconds. Your friends' climbs and your own will draw on this wall.
 
-**iPhone / iPad**: open the address in **Safari** → Share button → **Add to Home Screen** → Add. Open it from the
-Home Screen icon from then on.
-**Android**: open the address in Chrome → menu → **Install app** (or Add to Home screen).
+(The same page has `my-climbs.spraywall.json`, a few starter climbs: share icon → **From a file**.)
 
-Open it once with a connection and let it sit for a few seconds so it can save itself. After that, turn on aeroplane
-mode and open it again to check: it should start, with no connection.
+### Find and view climbs
 
-## 3. Load the wall and your climbs (once per device)
+* **The list** shows every climb on the wall with a picture, your stars, the grade and who set it. Search by name or comment;
+  sort by newest, oldest, hardest, easiest, top rated or name.
+* **Filters** narrow it by grade, by your star rating, by whose climbs (**All / My climbs / My drafts**) and by whether you have
+  **sent** them.
+* **Open a climb** to see it: the lit holds are the climb, the rest of the wall is dimmed. Colours: **green start**,
+  **blue hand**, **purple finish**, **orange foot**.
+  * Swipe **left or right** to go to the next or previous climb in your list.
+  * **Pinch** to zoom, drag to move around.
+  * The **eye** button shows the whole wall undimmed.
+  * The **ⓘ** button shows the grade, who set it, the comment, your rating and when you sent it.
+* **Rate it:** in the ⓘ panel tap the stars (tap the same star again to take it away).
+* **Mark it as sent** when you have climbed it: the **Mark sent** button above the climb turns green (**✓ Sent**).
+  Tap again to undo. The list shows ✓ Sent and you can filter by it.
 
-1. Open `https://leanderek.github.io/SprayWall/wall/get.html` on the device and download both files (or send them
-   over by AirDrop, a message to yourself, a cable: whatever you like).
-2. In the app: mountain icon (Walls) → **Import wall pack** → choose `home-wall.zip`. It takes a few seconds.
-3. On the list: share icon → **From a file** → choose `my-climbs.spraywall.json`.
+Your ratings and sent marks are **private**: they stay on your phone and nobody else ever sees them.
 
-A friend does the same with the wall pack you give them. Then you can send them climbs.
+### Set a climb
 
-## Sharing climbs
+1. On the list tap **Set a climb**.
+2. Pick a hold type at the bottom (**Start**, **Hand**, **Finish**, **Foot**), then **tap every hold** you want to be that type.
+   Pick another type and keep tapping. Tap a lit hold again to unlight it; **Erase** removes holds; the **undo** arrow takes
+   back your last tap; the **eye** hides the hold outlines if they get in the way.
+3. Tap **Save**, give it a name, set the grade with the slider (or leave it as None), add a comment if you like, and **Save**.
 
-* **One climb**: open it → share icon → **Share a link** (the phone's share sheet: Messages, WhatsApp, etc.), **Copy
-  the link**, or **Share as a file**.
-* **All climbs** (also a backup): list → share icon → **Share all as a file**.
-* **Opening one**: tap the link, or open the file from the share icon → **From a file**. The app shows a review screen
-  first (New / Newer than yours / You already have this / You have a newer version / You deleted this one) and nothing is added until you press Import. Importing the same
-  climb twice does not double it, and a changed climb replaces the older copy.
-* A link carries the whole climb inside it (about 400 characters), so it works with no internet. The other person must
-  have the same wall loaded.
+A new climb is a **draft**: it lives only on your phone (the list marks it **Draft**) and you can edit or delete it whenever you
+like with the pencil and bin buttons.
 
-**iPhone caveat**: a link tapped in Messages opens in **Safari**, and Safari keeps its own separate copy of the app's
-data, apart from the Home Screen app. So with the Home Screen app: copy the link, open the app, share icon → paste it
-under "Or paste a link". Files and pasted links always land in the app you are in.
+### Share your climbs with friends
 
-## Moving your Android climbs
+There are two ways, and you can use either or both.
 
-`private/my-climbs.spraywall.json` holds the 3 climbs from your Android app. To make a fresh one later, copy
-`spraywall.db` (with its `-wal` and `-shm` files) off the phone into a folder, then run:
+**A. Shared board (automatic, needs everyone to have an account)**
 
-```
-python tools/convert_android_climbs.py <that folder>
-```
+1. One person taps the **share icon**, then **Sync with friends**, then **Start a board**. They get a **board code** like
+   `k7f2-9xqm-c4ta-p8dn`. **Copy** or **Share** it to friends (the code is the password to the board: only give it to people you trust).
+2. Everyone else taps the share icon, **Sync with friends**, types the code under **Join a friend's board**, and taps **Join**.
+3. To publish a climb, open your draft and tap **Upload**, then confirm. It goes to the board and appears on everyone's phone
+   within moments. **Once a climb is uploaded nobody can edit or delete it, you included**, so check it first.
+   Uploaded climbs show a small **Uploaded** tag. Only climbs you made (with your username) can be uploaded.
+4. New climbs from friends arrive by themselves whenever the app is open and you have a connection (you can also tap
+   **Check for new climbs** in the Sync panel).
 
-It only reads the copy. Each climb always gets the same id, so importing again never doubles anything up.
+**B. A link or a file (no account or board needed)**
 
-## Shared boards (Firebase)
+* Open a climb and tap the **share** button: **Share a link**, **Copy the link** or **Share as a file**. The other person needs the
+  same wall in their app. They open the link, look it over on the review screen, and tap **Import**.
+* Share icon → **Share all as a file** saves everything on the wall as one file: a handy **backup**.
+* To open a file or paste a link: share icon → **From a file** / **Open pasted link**.
 
-Optional. A **board** is a shared set of climbs for one wall. Everyone who has the board's code can see its climbs and
-upload their own.
+### Good to know
 
-* **Making climbs**: a new climb is a draft on your phone. Edit it, delete it, share it as a link or file, whatever you like.
-* **Uploading**: open the draft, press **Upload** (top of the climb), confirm. From then on it is final: nobody can edit or
-  delete it, you included, and it carries your username. Only climbs you made (with your username on them) can be uploaded.
-* **Receiving**: climbs other people upload arrive on their own, a few seconds after the app opens, when the connection
-  returns and every two minutes while it is open. They are final too, and show as Uploaded. (iOS does not allow background
-  work, so a phone catches up when the app is next opened.)
-* **Your climbs**: the Filters panel has **Show: All climbs / My climbs / My drafts**. A small "Draft" tag marks drafts.
-* **Ratings**: tap the stars in a climb's info panel. They stay on your phone. The list's "Your stars" filter and the
-  "Top rated" sort use your own ratings.
-* **Sent (completed)**: the **Mark sent** button above a climb turns it into a green **✓ Sent**; tap again to undo. The list
-  shows ✓ Sent, and Filters has **Sent: Any / Sent / Not sent yet**. Like ratings, it is only on your phone: not in files,
-  not on the board, not seen by anyone else, and it does not follow your account to another phone.
-* **Accounts**: the username is unique (Firebase refuses a second account with the same one) and the same on every phone you
-  sign in on. Share icon → shows who is signed in and has **Sign out**. Signed out, everything local still works, but you
-  cannot upload or receive climbs until you sign in again. **There is no password reset**: an account is a username and a
-  password and no real email address (Firebase is given `<username>@spraywall.example.com`, which nobody can receive mail at).
-  If a password is lost, the project owner deletes that account in the Firebase console (Authentication → Users) and the
-  username can be made again; climbs already uploaded under that name stay and count as yours again.
-* **Drafts do not follow your account**: they live on the phone they were made on. Uploading, or Share as a file, moves them.
-* **The board code** is 16 random letters and digits (`k7f2-9xqm-c4ta-p8dn`); nobody can list or guess boards. It is shown
-  under share icon → Sync with friends. Stopping on a phone keeps all its climbs.
-* A board belongs to one wall (its key, `home-wall`); a phone can only join a board for a wall it has.
-* Only climbs go on the board (name, grade, comment, author, holds). Not the wall photo, not ratings.
-* Existing climbs from before usernames and ratings are kept: they take your username, and their old star counts became your
-  own ratings. If something is wrong with a climb you uploaded, only the project owner can remove it, in the Firebase console
-  (Firestore Database → Data).
+* **Drafts stay on the phone they were made on.** Signing in on a new phone brings your uploaded climbs back, but not drafts,
+  ratings or sent marks. Use **Share all as a file** to back up or move those.
+* **iPhone and iPad can clear a web app's saved data** if the device is very short of space or the app is never opened.
+  Back up now and then with **Share all as a file**.
+* **iOS does not let apps work in the background**, so a phone picks up friends' new climbs the next time the app is open.
+* You can leave a board with **Sync with friends → Stop syncing on this phone**. Your climbs stay. **Sign out** (share icon)
+  keeps everything on the phone too, but you cannot upload or receive climbs until you sign in again.
 
-The shared database stamps each climb with its own clock, so a phone with a wrong clock cannot make others miss climbs.
+---
 
-Size: a typical climb is about 350 bytes of data plus about 2 KB of automatic indexes, roughly 2.4 KB (Google's size rules),
-so the free 1 GiB holds around 400,000 climbs. Switching the indexes off for the fields that are never searched would shrink
-that to about 0.6 KB, which is not worth the clicking. The free daily limits (50,000 reads, 20,000 writes) matter more, and a
-friend group stays far below them: joining a board reads each climb once, then a check with nothing new costs one read.
+## 2. How it works
 
-### Setting up the Firebase project (once, free, about 10 minutes)
-
-1. Go to console.firebase.google.com and sign in with a Google account. Create a project (name it SprayWall; Google
-   Analytics is not needed, switch it off).
-2. **Firestore**: Databases & Storage (or Build) → Firestore → Create database → Standard edition → pick a location near
-   you → **Production mode** → Create.
-3. **Rules**: Firestore → Rules tab → replace everything with the contents of `firebase/firestore.rules` → Publish.
-4. **Sign-in**: Authentication → Get started → Sign-in method → **Email/Password** → switch on the first toggle
-   (**Enable**, not "Email link") → Save. This is what usernames and passwords use. (Anonymous is not needed any more.)
-5. **The app's two values**: Project settings (gear) → General → Your apps → the web icon `</>` → give it a nickname →
-   Register app (leave Hosting off). The config shows `apiKey` and `projectId`.
-6. Put them in `site/src/sync-config.js` (replace `null`), run the tests, push. The share icon then has "Sync with friends".
-7. Prove it against the real project: `tools\.venv\Scripts\python.exe tools\firebase_check.py` (it makes two test accounts
-   with random names and leaves them, a test board and a few climbs behind; delete the accounts in Authentication → Users).
-
-If the rules in `firebase/firestore.rules` ever change, paste the new ones into the console again (step 3).
-
-The two values are not secrets (every phone running the app has them); the rules decide who may do what. GitHub may email a
-warning about a Google API key in the repository; for a Firebase web key that is expected. To tighten it further, in Google
-Cloud console → APIs & Services → Credentials, restrict that key to the website `https://leanderek.github.io/*`.
-
-Free plan limits (Spark): about 1 GiB stored, 50,000 reads and 20,000 writes per day; no card is needed. A friend group stays
-far below that (a sync that finds nothing new costs one read). If the daily limit were ever reached the database would stop
-until the next day; the app says so and keeps working offline.
-
-## Updating the app
-
-After changing anything in `site`, commit and push to `main`. The publish step runs `python tools/stamp.py` itself, so
-the offline file list and version number are always right on the live site. Phones that have the app notice the new
-version, show "A new version of SprayWall is ready" with an **Update** button, and switch when you tap it.
-
-With another host (Netlify and the like) run `python tools/stamp.py` yourself first, then upload the `site` contents;
-without it phones never see the change, and the test page will say so.
-
-## Things to know on iPhone / iPad
-
-* Needs iOS / iPadOS **16.4 or newer** (older ones cannot open the wall pack or compressed links).
-* **Back up**: Apple can clear a website's saved data if the device is very short of space or the app is not opened for
-  a long time. Use "Share all as a file" now and then and keep the file somewhere safe. Keep your wall pack too.
-* The Home Screen app and Safari keep separate data (see above).
-* Not yet tried on a real iPhone or iPad: it was tested in desktop Chrome with phone screen sizes and touch gestures.
-  Report anything odd.
-
-## Trying it before it is online
+### The three places things live
 
 ```
-python tools/serve.py          the app at http://localhost:8080/site/ and the tests at http://localhost:8080/tests/
-python tools/serve.py --lan    the same, but a phone or iPad on your Wi-Fi can open the address it prints
+ your phone / computer                GitHub                          Firebase (Google, free plan)
+ ─────────────────────                ──────                          ───────────────────────────
+ the app (cached copy)   ◄── loads ── the app's files (GitHub Pages)   Authentication: accounts
+ your wall (photo + holds)            the AV wall pack + starter climbs Firestore: boards and the
+ your drafts and downloaded climbs    this source code and the tests     climbs people uploaded
+ your ratings and sent marks          the database rules
+ your sign-in, board codes
 ```
 
-`--lan` serves only the app, not your private files, but use it only on a network you trust and stop it after. A device
-opening it this way **cannot install the app or use it offline** (that needs https); it is for looking and trying.
+* **The app** is a set of plain web files (JavaScript, no frameworks, no build step, no server code of ours). GitHub Pages
+  serves them; a *service worker* saves a complete copy on your device so it opens offline.
+* **Your device** keeps everything personal in the browser's database (IndexedDB): the wall photo and holds, all climbs
+  (drafts and uploaded), your ratings, sent marks, username and sign-in, and the codes of boards you joined.
+* **Firebase** is Google's free hosting for two things only: **accounts** (usernames and passwords; Google stores the passwords
+  safely, the app never sees or keeps them) and the **shared boards** (uploaded climbs).
 
-Add `?nosw` to the address while developing to switch the offline copy off so that edited files show up at once.
+### What is public and what is private
 
-## Checks
+| | Where | Who can see it |
+| --- | --- | --- |
+| This source code, tests, tools, README, the database rules | GitHub (public repository) | everyone |
+| The AV wall pack (`wall/av-wall.zip`, a reduced photo with no location data) and starter climbs | GitHub and the website | everyone |
+| The Firebase project id and web API key (`site/src/sync-config.js`) | GitHub | everyone. They are **not secrets**: every phone running the app needs them. The rules decide who may do what |
+| Accounts (usernames; passwords are held by Google) | Firebase | the project owner sees usernames; nobody sees passwords |
+| Boards and uploaded climbs | Firebase | people who have the board's code |
+| Drafts, ratings, sent marks, your wall copy | your device only | you |
+| Working files (the original wall photo, hold-finding output, logs) | the owner's computer, `private/` (git-ignored) | the owner |
+
+### Walls, holds and climbs
+
+* A **wall pack** is a `.zip` with a photo and a `holds.json` (see [part 3](#3-making-a-wall-of-your-own)). Importing it saves
+  the photo (shrunk to at most 2600 pixels on its long side) and the hold map on your device. Each wall has a **key** such as
+  `av-wall`; importing a pack with the same key again updates that wall in place and keeps its climbs.
+* A **climb** is just a list of hold numbers and what each is used for, for example `62:finish,101:hand,468:start,545:foot`,
+  plus a name, grade (V0 to V17 or none), comment, author and dates. It points at holds by number, which is why hold numbers
+  must never change once climbs exist.
+* A climb is a **draft** (only on your device; editable) or **uploaded** (on a board; final). Climbs from friends arrive as uploaded.
+* **Ratings** (1 to 5 stars) and **sent marks** are stored separately from climbs, only on your device, so they can never
+  be shared by accident: they are not in links, files or boards.
+
+### Accounts
+
+Firebase's sign-in is built around email addresses, so your username is turned into one that **nobody can receive mail at**:
+`yourname@spraywall.example.com`. Firebase refuses a second account with the same address, which is what makes usernames
+unique. Nothing is ever emailed, which is also why a lost password cannot be reset. Signing in gives your phone a token that is
+renewed automatically; the password is not stored.
+
+### Boards and uploading
+
+* A **board** belongs to one wall and is found only by its 16-character random code (about 79 bits: it cannot be guessed, and
+  boards cannot be listed). Anyone who has the code and is signed in can **read** the board's climbs and **add** their own.
+* **Uploading** adds one document to the board with the climb's name, grade, comment, author, holds and the time the database
+  received it. The database's rules then allow **no change and no deletion** of it, by anyone.
+* **Receiving**: each phone asks "anything newer than my last visit?" using the database's own clock stamps (so a phone with a
+  wrong clock cannot make others miss climbs). Because uploaded climbs never change, there is nothing to merge: a climb is
+  either on your phone or not. A check with nothing new costs one database read.
+* The app checks a couple of seconds after anything changes, when it opens or comes back to the front, when the connection
+  returns, and every two minutes while it is open.
+
+### Security: what the database enforces
+
+The rules in [`firebase/firestore.rules`](firebase/firestore.rules) run on Google's servers, so a hacked or hand-made copy of
+the app cannot get round them. They allow only this:
+
+* you must be signed in with a username and password (anonymous visitors are refused);
+* boards can be created and read by code, never listed, changed or deleted;
+* a climb can be **added** to a board, once, and the **author must be the account that adds it**: you cannot upload under
+  someone else's name. It must have the right fields, types and sizes, and valid holds;
+* a climb can never be updated or deleted.
+
+This was tested against the real project with hand-made requests (see `tools/firebase_check.py`). What it cannot prevent:
+someone with the board's code who is signed in can upload their own (valid) climbs to it, which is why the code is shared
+only with friends. If a bad climb gets in, only the project owner can remove it, in the Firebase console.
+
+### Offline and updates
+
+On the first visit a service worker (`site/sw.js`) saves every file of the app. After that the app starts from the saved copy.
+When a new version is published, the phone notices the changed version number, downloads it quietly, and shows **Update**; the
+old version keeps running until you tap it, so the app never changes under you mid-climb. `tools/stamp.py` writes the file list and
+version number; the publishing workflow runs it for you.
+
+### Costs and limits
+
+Everything is on free plans: GitHub Pages, and Firebase's free **Spark** plan (about 1 GiB of data, 50,000 reads and 20,000
+writes per day, no card needed). A climb takes about 2.4 KB (mostly Firebase's automatic search indexes), so a board could hold
+roughly 400,000 climbs. A friend group stays far below the daily limits. If a limit were ever hit, Firebase stops until the next day
+and the app says so; everything local keeps working.
+
+### Sharing format
+
+Links and files hold the same small JSON (`spraywall-climbs`, version 1: wall key and name, then each climb's id, name,
+grade, comment, author, holds, dates). Everything arriving from outside is checked and cleaned (text only, sizes limited, dates
+clamped), and a link is a compressed version of the same data inside the web address, so it works without a server.
+
+---
+
+## 3. Making a wall of your own
+
+A wall is **one photo** plus **a list of holds** with their positions. The app does not find holds for you; you make the pack
+once, then import it on every phone.
+
+### 1. Take the photo
+
+* Stand square-on and as far back as you can, with the **whole board** in view and the phone held level.
+* Even light, no strong shadows. Dark areas can be brightened in any photo editor.
+* Crop it to the board (a little margin is fine). If the board is photographed at an angle, straighten it
+  ("perspective correction") so that straight edges look straight: climbs are drawn on this picture exactly as it is.
+* Any size is fine. The app shrinks it to 2600 pixels on the long side when importing.
+* If the board has a sloping and a vertical part, either straighten each part and join them into one picture, or use one flat
+  view; the app draws one picture.
+
+### 2. Find the holds
+
+You need the **centre of every hold** in pixels on the photo (and optionally its size, and its outline). Ways to get them:
+
+* **By hand**: open the photo in any editor that shows pixel coordinates (Paint, Photoshop, GIMP, Preview, an online tool) and note the
+  centre of each hold. Slow, but fine for a small wall.
+* **With software**: any tool that finds blobs of colour or a segmentation model can produce them. The AV wall's 524 holds
+  were found with Meta's *Segment Anything* model on the straightened photo, then cleaned up by hand in a small editor (to add
+  missed holds, delete shadows, redraw bad outlines). Those tools live in the author's separate Android project, not in this
+  repository, but the result is just numbers in a file, so anything that can produce a list of positions works.
+* **Outlines** (optional): a polygon around each hold makes the app draw a ring that follows its shape and makes small holds easier
+  to tap. Without them each hold is a circle.
+
+### 3. Write the hold list and build the pack
+
+Put the holds in a CSV (positions in **pixels** from the photo's top-left):
 
 ```
-tools\.venv\Scripts\python.exe tools\run_tests.py       the unit and screen tests (needs Chrome or Edge)
-tools\.venv\Scripts\python.exe tools\offline_check.py   installs the app, stops the server, proves it still works
-tools\.venv\Scripts\python.exe tools\share_check.py     three separate "phones" share a link and a file
+# x,y,r        r is the hold's radius in pixels (optional)
+812,1304,38
+1020,1288,30
 ```
 
-## How it is built
+and build the pack with the included tool (needs only Python):
 
-Plain JavaScript modules, no build step and no libraries, so there is nothing to install or keep up to date.
-`site/src/domain` is the logic (holds, grades, sharing format, merge rules), `site/src/data` is saving (IndexedDB) and
-importing, `site/src/ui` is the screens, `site/sw.js` is the offline copy. The wall pack and share formats are
-described at the top of `domain/wallpack.js` and `domain/share.js`.
+```
+python tools/make_wall_pack.py build photo.jpg holds.csv --name "My garage wall" --key my-garage-wall --angle 25 -o my-garage-wall.zip
+python tools/make_wall_pack.py check my-garage-wall.zip
+```
+
+`--angle` (degrees of overhang) is optional. `--outlines outlines.json` can add outlines. `check` applies the same rules as the
+app, so a pack that passes will import. The tool numbers holds 1, 2, 3 in file order unless the CSV has an `id` column.
+
+### 4. Or write `holds.json` yourself
+
+A wall pack is a zip containing the photo and a file named exactly `holds.json`:
+
+```json
+{
+  "version": 1,
+  "key": "my-garage-wall",
+  "name": "My garage wall",
+  "image": "wall.jpg",
+  "angle": 25,
+  "holds": [
+    { "id": 1, "x": 0.231, "y": 0.412, "r": 0.011,
+      "outline": [[0.22, 0.40], [0.24, 0.40], [0.25, 0.43]] },
+    { "id": 2, "x": 0.512, "y": 0.300 }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `version` | always `1` |
+| `key` | the wall's identity: letters, digits, dots, dashes, underscores (max 80). **Unique per wall, and never changed.** Defaults to the name made lowercase with dashes |
+| `name` | what people see (you can rename it on each phone later) |
+| `image` | the photo's file name inside the zip (JPEG or PNG) |
+| `angle` | optional, degrees of overhang |
+| `holds[].id` | a whole number, unique in the file. **Climbs point at holds by this number, so never renumber** |
+| `holds[].x`, `y` | the hold's centre as a fraction (0 to 1) of the photo's width and height, from the top-left |
+| `holds[].r` | optional radius as a fraction of the photo's **width** (0 to 0.5; default 0.02) |
+| `holds[].outline` | optional list of at least 3 `[x, y]` corners (fractions) around the hold |
+
+### 5. Import it, share it
+
+* Import: **Walls → Import wall pack → your zip**. Check the climb drawing looks right on a few holds.
+* Give friends the zip (any way you like, or host it like `wall/` in this repository) and they import it the same way.
+  They must all use the **same pack**, because climbs refer to holds by number.
+* **Updating a wall later** (new photo, extra holds): keep the same `key` and **keep every existing hold's `id`**; add new holds with
+  new numbers and drop only holds that are really gone. Importing the new pack updates the wall in place and keeps all climbs.
+* **Your own board**: once your wall is imported, **Sync with friends → Start a board** makes a board for that wall with its own
+  code. See the first question below to understand where its climbs go.
+
+---
+
+## 4. Running your own copy and developing
+
+You can use the public app as it is. To run an independent copy (your own address, your own accounts and database, your own
+free quota):
+
+1. **Fork** this repository on GitHub. In your fork: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+   Every push to `main` then publishes the `site` folder and the `wall` folder (`.github/workflows/pages.yml`).
+2. Make a free **Firebase** project (console.firebase.google.com):
+   1. Create a project (Google Analytics is not needed).
+   2. **Firestore Database → Create database →** Standard edition, a location near you, **Production mode**.
+   3. Firestore **Rules** tab: replace everything with [`firebase/firestore.rules`](firebase/firestore.rules) and **Publish**.
+   4. **Authentication → Get started → Sign-in method → Email/Password →** enable the first toggle, **Save**.
+   5. Project settings (gear) → General → Your apps → web icon `</>` → register an app. You only need the `apiKey` and `projectId`
+      it shows; you can skip the install instructions (npm or script tag) and click **Continue to console**, because the app
+      does not use Firebase's code library.
+3. Put those two values in [`site/src/sync-config.js`](site/src/sync-config.js) and push. (Leave it `null` for an app with no accounts or
+   boards: it then only asks for a local username and everything else works.)
+4. Replace the files in `wall/` with your own wall pack and climbs, and the links in this README.
+5. `tools/firebase_check.py` proves your project works end to end (details below).
+
+Passwords cannot be reset (no real email addresses are used). To free a username, delete the account under
+**Authentication → Users**.
+
+### Project layout
+
+```
+site/            the app itself (this is all that is served)
+  index.html, styles.css, manifest.webmanifest, sw.js (offline copy), icons/
+  src/domain/    pure logic: holds, climbs, usernames, sharing format, wall packs, board codes
+  src/data/      saving (IndexedDB), the database client (firestore.js), syncing (sync.js), wall import
+  src/ui/        the screens
+  src/sync-config.js   the Firebase project values
+wall/            the AV wall pack, starter climbs and the download page
+firebase/        the database rules
+tests/           the tests (they run in a browser) and a fake Firebase
+tools/           helper scripts (below)
+.github/workflows/pages.yml   publishes the site
+```
+
+### Tools and tests
+
+There is no Node here; the scripts run headless Chrome or Edge through a small Python helper. Create a virtual environment
+in `tools/.venv` with `pip install websocket-client` first.
+
+| Command | What it does |
+| --- | --- |
+| `python tools/serve.py` | try the app at http://localhost:8080/site/ (tests at /tests/). `--lan` serves only the app to your Wi-Fi |
+| `tools\.venv\Scripts\python.exe tools\run_tests.py` | all unit and screen tests (95 + 35) |
+| `... tools\offline_check.py` | installs the app, switches the server off, proves it still works, and tests updates |
+| `... tools\share_check.py` | three separate browser profiles share a link and a file |
+| `... tools\firebase_check.py` | against the **real** Firebase project: accounts, uploads, "no editing or deleting", no uploading under another name. Makes two test accounts and removes them again; leaves a test board |
+| `python tools/stamp.py` | rewrites the offline file list and version (the publishing workflow also does this) |
+| `python tools/make_wall_pack.py` | builds and checks wall packs (part 3) |
+| `... tools\check_modules.py`, `peek_tests.py` | find a script that fails to load, or a test that hangs |
+
+Add `?nosw` to the address to turn the offline copy off while developing and `?nosync` to turn accounts and boards off.
+
+---
+
+## Questions
+
+**If someone makes their own wall, do their climbs end up in this database?**
+Only if they use *this* app copy and start a board. All boards made through https://leanderek.github.io/SprayWall/ live in the
+same Firebase project (the one used by this app), but each board is separate: it has its own random code, and its climbs are only
+visible to people who have that code. So a stranger's climbs never appear on the AV wall board, and nothing from the AV board
+appears on theirs. They do share the project's free daily limits and the accounts list. Climbs stay on the phone (and are
+never sent anywhere) unless the person creates an account, starts a board and taps **Upload**. For a fully separate setup,
+fork the project and use your own Firebase ([part 4](#4-running-your-own-copy-and-developing)).
+
+**What if two different walls use the same key?**
+The key is what the app uses to recognise a wall. If two people both name their pack `home-wall`, a phone treats them as the
+same wall (importing one updates the other, and a board for one can be joined from the other). Give your wall a distinctive key,
+for example `town-climbing-hall-wall-1`. (This is why the AV wall's key is `av-wall`; it used to be `home-wall`, and phones
+and boards that still say the old name are recognised and moved automatically.)
+
+**Why can't I delete or edit an uploaded climb?**
+That is the point: a board is a permanent shared list. Draft carefully, check the climb in the viewer, and upload when you are
+happy. Drafts can be edited and deleted freely.
+
+**I lost my phone / got a new one.**
+Install the app, sign in with your username and password, import the wall, and join your board again with its code. Your uploaded
+climbs return. Drafts, ratings and sent marks were only on the old phone (unless you saved a backup file).
+
+**Can I use it without an account?**
+Not in the public app: every user makes an account the first time (it needs a connection once), so that every climb has a real,
+unique username on it. A phone that already had a name from an earlier version can tap **Later** and carry on locally, setting, viewing,
+rating and sharing climbs by file or link, but it cannot upload or receive friends' climbs until it signs in. A copy with no
+Firebase project (part 4) has no accounts and only asks for a name.
+
+**Is my data safe?**
+Your climbs and ratings live on your device. Accounts and uploaded climbs are in Google's Firebase. Passwords are handled only by
+Google. The code and rules are public so you can read exactly what the app and database do.
