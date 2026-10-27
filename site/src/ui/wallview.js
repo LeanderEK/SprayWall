@@ -7,13 +7,13 @@ import { h } from './dom.js';
 // How the wall is painted. dim: how much of the photo is darkened so lit holds stand out. spotlight: show lit holds at
 // full brightness through the dimming. ring: thickness of a lit hold's outline. outlineOthers: a thin outline round
 // every other hold too (the editor, so you can see what to tap). tint: how strongly the inside of a lit hold is washed with
-// its colour (0 = not at all, 0.16 = the wash the app always had). Viewing a climb has none (`climb`, `climbBright`): to put the
-// wash back there, set their `tint` to 0.16.
+// its colour (0 = not at all, 0.16 = the wash the app always had). Viewing a climb and setting one have none (`climb`, `climbBright`,
+// `editor`, `editorClean`): to put the wash back there, set their `tint` to 0.16.
 export const PAINT = {
   climb: { dim: 0.4, spotlight: true, ring: 3.5, outlineOthers: false, tint: 0 },
   climbBright: { dim: 0, spotlight: false, ring: 3.5, outlineOthers: false, tint: 0 },
-  editor: { dim: 0.18, spotlight: false, ring: 3.5, outlineOthers: true, tint: 0.16 },
-  editorClean: { dim: 0.18, spotlight: false, ring: 3.5, outlineOthers: false, tint: 0.16 },
+  editor: { dim: 0.18, spotlight: false, ring: 3.5, outlineOthers: true, tint: 0 },
+  editorClean: { dim: 0.18, spotlight: false, ring: 3.5, outlineOthers: false, tint: 0 },
   thumb: { dim: 0.55, spotlight: true, ring: 1.6, outlineOthers: false, tint: 0.16 },
   thumbPlain: { dim: 0, spotlight: false, ring: 1.6, outlineOthers: false, tint: 0.16 },
   minimap: { dim: 0.25, spotlight: true, ring: 2.2, outlineOthers: false, tint: 0.16 },

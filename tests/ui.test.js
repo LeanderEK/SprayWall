@@ -1386,7 +1386,7 @@ test('share sheet: it says what a SprayWall link is', async () => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 });
 
-test('viewing a climb: the inside of a lit hold is not washed with its colour, the ring is; the editor and thumbnails keep the wash', async () => {
+test('viewing or setting a climb: the inside of a lit hold is not washed with its colour, the ring is; the thumbnails keep the wash', async () => {
   const photo = document.createElement('canvas');
   photo.width = photo.height = 200;
   const pctx = photo.getContext('2d');
@@ -1402,9 +1402,9 @@ test('viewing a climb: the inside of a lit hold is not washed with its colour, t
   };
   assert.eq(centre(PAINT.climb), [128, 128, 128], 'no wash inside the hold');
   assert.eq(centre(PAINT.climbBright), [128, 128, 128]);
-  const washed = centre(PAINT.editorClean);
-  assert.ok(washed[1] > washed[0] + 3, `the editor still washes it with the Start green (${washed})`);
-  assert.ok(centre(PAINT.thumb)[1] > 128, 'so do the thumbnails');
+  assert.eq(centre(PAINT.editor)[1], centre(PAINT.editorClean)[1], 'the editor, with or without its outlines, is the same inside the hold');
+  assert.ok(Math.abs(centre(PAINT.editorClean)[1] - centre(PAINT.editorClean)[0]) < 2, `no Start green wash in the editor either (${centre(PAINT.editorClean)})`);
+  assert.ok(centre(PAINT.thumb)[1] > 128, 'the thumbnails still have it');
   const ring = (paint) => {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 200;
