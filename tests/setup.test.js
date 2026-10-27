@@ -5,7 +5,8 @@ import { MemoryStore, Repo } from '../site/src/data/repo.js';
 import { SyncService } from '../site/src/data/sync.js';
 import { DEFAULTS, MEMORY } from '../site/src/defaults.js';
 import { parseBoardCode } from '../site/src/domain/sync.js';
-import { downloadPack, ensureDefaults, ensureIdentity, installDefaultWall } from '../site/src/setup.js';
+import { isFirstAvWall } from '../site/src/domain/wallpack.js';
+import { downloadPack, ensureDefaults, ensureIdentity, installDefaultWall, refreshDefaultWall } from '../site/src/setup.js';
 
 // What happens when the app opens: who you are, and the default wall and board.
 
@@ -55,7 +56,8 @@ async function boardWithOneClimb(backend) {
 const config = (code) => ({ wall: { key: 'av-wall', pack: 'wall/av-wall.zip' }, board: { wallKey: 'av-wall', code } });
 
 test('defaults: the app is set up for the AV wall and its open board', () => {
-  assert.eq(DEFAULTS.wall, { key: 'av-wall', pack: 'wall/av-wall.zip' });
+  assert.eq([DEFAULTS.wall.key, DEFAULTS.wall.pack, DEFAULTS.wall.version], ['av-wall', 'wall/av-wall.zip', 2]);
+  assert.ok(DEFAULTS.wall.replaces === isFirstAvWall);
   assert.eq(DEFAULTS.board.wallKey, 'av-wall');
   assert.eq(parseBoardCode(DEFAULTS.board.code), 'mh6gp7rt2aajh5jp', 'the board code is a valid code');
 });
@@ -220,11 +222,81 @@ test('defaults: with no Firebase the wall is still set up, and there is no board
   assert.eq([result.wall, result.board], ['imported', 'skipped']);
 });
 
-test('defaults: the real wall pack downloads from the site and imports with its 524 holds', async () => {
+test('defaults: the real wall pack downloads from the site and imports with its 525 holds', async () => {
   const { repo, sync } = freshPhone(null);
   const result = await ensureDefaults({ repo, sync, config: config('mh6g-p7rt-2aaj-h5jp'), fetchPack: () => downloadPack('/wall/av-wall.zip') });
   assert.eq(result.wall, 'imported');
   const wall = await repo.getWall('av-wall');
-  assert.eq([wall.name, wall.holds.length, wall.imageWidth > 1000], ['AV wall', 524, true]);
+  assert.eq([wall.name, wall.holds.length, wall.imageWidth > 1000], ['AV wall', 525, true]);
   await assert.rejects(downloadPack('/wall/no-such-pack.zip'), 'the download failed (404)');
+});
+
+// ---- an updated wall pack reaches phones that already have the wall ----
+
+/** The AV wall as first published (524 holds, numbers up to 602, adding up to 161422: all of 1 to 602 but 78 left out). */
+const firstWall = () => {
+  const left = new Set([215]);
+  for (let id = 220; id <= 296; id++) left.add(id);
+  const holds = [];
+  for (let id = 1; id <= 602; id++) if (!left.has(id)) holds.push({ id, x: 0.5, y: 0.5, r: 0.02, outline: null });
+  return { ...WALL, holds };
+};
+const versioned = (version = 2) => ({ wall: { key: 'av-wall', pack: 'wall/av-wall.zip', version, replaces: isFirstAvWall }, board: null });
+
+test('wall update: a phone with the wall as first published gets the new pack once, keeps its climbs and the wall it was on', async () => {
+  const { repo } = freshPhone(null);
+  await repo.saveWall(firstWall());
+  assert.ok(isFirstAvWall(await repo.getWall('av-wall')));
+  await repo.setUsername('lee');
+  const climb = await repo.saveClimb({ wallKey: 'av-wall', name: 'Mine', grade: 3, comment: '', holds: '1:start,2:finish' });
+  await repo.saveWall({ ...WALL, key: 'other', name: 'Other', holds: [{ id: 1, x: 0.5, y: 0.5, r: 0.02, outline: null }] });
+  assert.eq((await repo.activeWall()).key, 'other');
+  const { log, fetchPack, importPack } = stubs();
+  assert.eq(await refreshDefaultWall({ repo, config: versioned(), fetchPack, importPack }), 'updated');
+  assert.eq(log, ['download wall/av-wall.zip', 'import']);
+  assert.eq((await repo.getWall('av-wall')).holds.length, 1, 'the new pack is in');
+  assert.eq((await repo.getClimb(climb.id)).name, 'Mine', 'its climbs are still there');
+  assert.eq((await repo.activeWall()).key, 'other', 'the wall it was on stays the current one');
+  assert.eq(await repo.getMeta(MEMORY.wallVersion), 2);
+  assert.eq(await refreshDefaultWall({ repo, config: versioned(), fetchPack, importPack }), 'current');
+  assert.eq(log.length, 2, 'and it is not fetched again');
+});
+
+test('wall update: a phone recorded as having version 1 is updated, one with the current version is not, and a new install records the version', async () => {
+  const { repo } = freshPhone(null);
+  await repo.saveWall({ ...WALL, holds: [{ id: 1, x: 0.5, y: 0.5, r: 0.02, outline: null }, { id: 2, x: 0.2, y: 0.2, r: 0.02, outline: null }] });
+  await repo.setMetaQuietly(MEMORY.wallVersion, 1);
+  const { log, fetchPack, importPack } = stubs();
+  assert.eq(await refreshDefaultWall({ repo, config: versioned(2), fetchPack, importPack }), 'updated');
+  assert.eq(await refreshDefaultWall({ repo, config: versioned(2), fetchPack, importPack }), 'current');
+  assert.eq(await refreshDefaultWall({ repo, config: versioned(3), fetchPack, importPack }), 'updated', 'the next version reaches it too');
+  assert.eq(log.length, 4);
+
+  const fresh = freshPhone(null);
+  const result = await ensureDefaults({ repo: fresh.repo, sync: fresh.sync, config: versioned(2), fetchPack, importPack });
+  assert.eq(result.wall, 'imported');
+  assert.eq(await fresh.repo.getMeta(MEMORY.wallVersion), 2, 'a new install is already on the current version');
+  assert.eq(await refreshDefaultWall({ repo: fresh.repo, config: versioned(2), fetchPack, importPack }), 'current');
+});
+
+test('wall update: a wall of your own under the same key is left alone, and a wall you deleted stays deleted', async () => {
+  const { repo } = freshPhone(null);
+  const { log, fetchPack, importPack } = stubs();
+  assert.eq(await refreshDefaultWall({ repo, config: versioned(), fetchPack, importPack }), 'current', 'no wall, nothing to update');
+  await repo.saveWall({ ...WALL, holds: [{ id: 7, x: 0.1, y: 0.1, r: 0.02, outline: null }, { id: 8, x: 0.2, y: 0.2, r: 0.02, outline: null }] });
+  assert.eq(await refreshDefaultWall({ repo, config: versioned(), fetchPack, importPack }), 'current', 'not the wall this app published, and never given a version');
+  assert.eq(await refreshDefaultWall({ repo, config: { wall: { key: 'av-wall', pack: 'wall/av-wall.zip' }, board: null }, fetchPack, importPack }), 'current', 'a copy of the app with no versions never updates');
+  assert.eq(log, []);
+});
+
+test('wall update: with no connection the wall is untouched and it is tried again next time', async () => {
+  const { repo } = freshPhone(null);
+  await repo.saveWall(firstWall());
+  const offline = async () => { throw new Error('offline'); };
+  const { log, fetchPack, importPack } = stubs();
+  assert.eq(await refreshDefaultWall({ repo, config: versioned(), fetchPack: offline, importPack }), 'failed');
+  assert.eq((await repo.getWall('av-wall')).holds.length, 524, 'nothing changed');
+  assert.eq(await repo.getMeta(MEMORY.wallVersion), undefined);
+  assert.eq(await refreshDefaultWall({ repo, config: versioned(), fetchPack, importPack }), 'updated');
+  assert.eq(log.length, 2);
 });

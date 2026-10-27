@@ -254,7 +254,7 @@ You need the **centre of every hold** in pixels on the photo (and optionally its
 
 * **By hand**: open the photo in any editor that shows pixel coordinates (Paint, Photoshop, GIMP, Preview, an online tool) and note the
   centre of each hold. Slow, but fine for a small wall.
-* **With software**: any tool that finds blobs of colour or a segmentation model can produce them. The AV wall's 524 holds
+* **With software**: any tool that finds blobs of colour or a segmentation model can produce them. The AV wall's 525 holds
   were found with Meta's *Segment Anything* model on the straightened photo, then cleaned up by hand in a small editor (to add
   missed holds, delete shadows, redraw bad outlines). Those tools live in the author's separate Android project, not in this
   repository, but the result is just numbers in a file, so anything that can produce a list of positions works.

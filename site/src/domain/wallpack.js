@@ -18,6 +18,9 @@
 
 export const PACK_FILE_NAME = 'holds.json';
 
+/** The AV wall as it was first published: 524 holds, numbered up to 602, whose numbers add up to 161422. A phone that has exactly this one is updated to the current pack. */
+export const isFirstAvWall = (wall) => wall.holds.length === 524 && Math.max(...wall.holds.map((hold) => hold.id)) === 602 && wall.holds.reduce((sum, hold) => sum + hold.id, 0) === 161422;
+
 // A wall that was given a new key. Only the one wall is moved: a "home-wall" that somebody else made is a different wall
 // that happens to have the same key, so it is told apart by its holds (`isTheSameWall`) and left alone.
 //   - a phone that saved the wall under the old key moves it to the new key (Repo.upgradeData);
@@ -28,8 +31,7 @@ export const RENAMED_WALLS = [
     to: 'av-wall',
     fromName: 'Home wall',
     toName: 'AV wall',
-    // 524 holds, numbered up to 602, whose numbers add up to 161422
-    isTheSameWall: (wall) => wall.holds.length === 524 && Math.max(...wall.holds.map((hold) => hold.id)) === 602 && wall.holds.reduce((sum, hold) => sum + hold.id, 0) === 161422,
+    isTheSameWall: isFirstAvWall,
   },
 ];
 

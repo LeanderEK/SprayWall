@@ -58,7 +58,35 @@ export async function installDefaultWall({ repo, config = DEFAULTS, fetchPack = 
   progress('Adding the AV wall…');
   const { wall } = await importPack(pack, repo);
   await repo.setMetaQuietly(MEMORY.wall, true);
+  if (config.wall.version) await repo.setMetaQuietly(MEMORY.wallVersion, config.wall.version);
   return wall;
+}
+
+/**
+ * Brings the AV wall on this phone up to date with the pack published next to the app, once per new version of the pack: the pack is
+ * fetched and imported over the wall (which keeps its name and every climb), and the wall you are climbing on stays the current one.
+ * It only touches a wall this app put there: one recorded as an earlier version, or, for phones set up before there were versions,
+ * one that is exactly the first published wall (`config.wall.replaces`). A wall you deleted stays deleted, and a wall of your own
+ * under the same key is left alone. If the download fails nothing changes and it is tried again next time.
+ * Returns 'updated', 'current' or 'failed'.
+ */
+export async function refreshDefaultWall({ repo, config = DEFAULTS, fetchPack = downloadPack, importPack = importWallPack }) {
+  const version = config.wall.version;
+  if (!version) return 'current';
+  const wall = await repo.getWall(config.wall.key);
+  if (!wall) return 'current';
+  const had = await repo.getMeta(MEMORY.wallVersion);
+  if (had >= version) return 'current';
+  if (!(had < version) && !config.wall.replaces?.(wall)) return 'current';
+  const before = await repo.activeWall();
+  try {
+    await importPack(await fetchPack(config.wall.pack), repo);
+  } catch {
+    return 'failed';
+  }
+  if (before && before.key !== config.wall.key) await repo.setActiveWall(before.key);
+  await repo.setMetaQuietly(MEMORY.wallVersion, version);
+  return 'updated';
 }
 
 /**

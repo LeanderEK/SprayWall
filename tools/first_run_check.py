@@ -106,7 +106,7 @@ def main():
         started = time.time()
         new_phone.create_account(f"new-user-{ending}", password)
         print(f"       the app was ready {time.time() - started:.1f} s after creating the account")
-        check(js(new_phone, wall_bits) == '["AV wall",524]', "the AV wall was downloaded and imported by itself (524 holds)")
+        check(js(new_phone, wall_bits) == '["AV wall",525]', "the AV wall was downloaded and imported by itself (525 holds)")
         joined = js(new_phone, "return (await app.repo.getSyncSetup('av-wall'))?.code;")
         check(joined == code, "and the AV board was joined by itself")
         got = js(new_phone, "return (await app.repo.listClimbs('av-wall')).length;")
@@ -117,7 +117,7 @@ def main():
         print("A brand-new phone that taps Later")
         late_phone.go(base)
         late_phone.skip_account()
-        check(js(late_phone, wall_bits) == '["AV wall",524]', "the AV wall is there without an account")
+        check(js(late_phone, wall_bits) == '["AV wall",525]', "the AV wall is there without an account")
         check(js(late_phone, "return await app.repo.getSyncSetup('av-wall');") is None, "but no board yet")
         late = f"late-user-{ending}"
         made = js(late_phone, "return await app.sync.signUp(%r, %r);" % (late, password))

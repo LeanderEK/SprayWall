@@ -8,7 +8,7 @@ import { h, toast } from './ui/dom.js';
 import { mountEditor } from './ui/editor.js';
 import { mountImporter } from './ui/importer.js';
 import { mountList } from './ui/list.js';
-import { ensureDefaults, ensureIdentity } from './setup.js';
+import { ensureDefaults, ensureIdentity, refreshDefaultWall } from './setup.js';
 import { askForAccount } from './ui/account.js';
 import { askForUsername } from './ui/username.js';
 import { mountViewer } from './ui/viewer.js';
@@ -170,6 +170,8 @@ function setUpDefaults({ first }) {
     };
     try {
       const result = await ensureDefaults({ repo: app.repo, sync: app.sync, progress });
+      // A phone that has an older AV wall gets the new pack in the background, without holding up the app or showing the setting up screen.
+      if (result.wall === 'had') refreshDefaultWall({ repo: app.repo }).then((outcome) => outcome === 'updated' && toast('The AV wall has been updated.')).catch(() => {});
       if (result.problem) toast(`${result.problem} It will try again next time, or use Walls → Get the AV wall.`);
       else if (first && result.wall === 'imported') toast(result.board === 'joined' ? 'The AV wall and its shared climbs are ready.' : 'The AV wall is ready.');
     } catch (error) {
