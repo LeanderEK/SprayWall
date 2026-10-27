@@ -6,15 +6,17 @@ import { h } from './dom.js';
 
 // How the wall is painted. dim: how much of the photo is darkened so lit holds stand out. spotlight: show lit holds at
 // full brightness through the dimming. ring: thickness of a lit hold's outline. outlineOthers: a thin outline round
-// every other hold too (the editor, so you can see what to tap).
+// every other hold too (the editor, so you can see what to tap). tint: how strongly the inside of a lit hold is washed with
+// its colour (0 = not at all, 0.16 = the wash the app always had). Viewing a climb has none (`climb`, `climbBright`): to put the
+// wash back there, set their `tint` to 0.16.
 export const PAINT = {
-  climb: { dim: 0.4, spotlight: true, ring: 3.5, outlineOthers: false },
-  climbBright: { dim: 0, spotlight: false, ring: 3.5, outlineOthers: false },
-  editor: { dim: 0.18, spotlight: false, ring: 3.5, outlineOthers: true },
-  editorClean: { dim: 0.18, spotlight: false, ring: 3.5, outlineOthers: false },
-  thumb: { dim: 0.55, spotlight: true, ring: 1.6, outlineOthers: false },
-  thumbPlain: { dim: 0, spotlight: false, ring: 1.6, outlineOthers: false },
-  minimap: { dim: 0.25, spotlight: true, ring: 2.2, outlineOthers: false },
+  climb: { dim: 0.4, spotlight: true, ring: 3.5, outlineOthers: false, tint: 0 },
+  climbBright: { dim: 0, spotlight: false, ring: 3.5, outlineOthers: false, tint: 0 },
+  editor: { dim: 0.18, spotlight: false, ring: 3.5, outlineOthers: true, tint: 0.16 },
+  editorClean: { dim: 0.18, spotlight: false, ring: 3.5, outlineOthers: false, tint: 0.16 },
+  thumb: { dim: 0.55, spotlight: true, ring: 1.6, outlineOthers: false, tint: 0.16 },
+  thumbPlain: { dim: 0, spotlight: false, ring: 1.6, outlineOthers: false, tint: 0.16 },
+  minimap: { dim: 0.25, spotlight: true, ring: 2.2, outlineOthers: false, tint: 0.16 },
 };
 
 // How far an outline is pushed out beyond the hold, besides a tenth of the hold's size: a fixed number of pixels of the picture as laid out
@@ -121,10 +123,12 @@ export function drawWall(ctx, w, h, image, holds, marks, paint, zoom, paths) {
   for (const hold of lit) {
     const color = roleByCode.get(marks[hold.id]).color;
     const path = paths.get(hold);
-    ctx.globalAlpha = 0.16;
-    ctx.fillStyle = color;
-    ctx.fill(path);
-    ctx.globalAlpha = 1;
+    if (paint.tint > 0) {
+      ctx.globalAlpha = paint.tint;
+      ctx.fillStyle = color;
+      ctx.fill(path);
+      ctx.globalAlpha = 1;
+    }
     ctx.strokeStyle = color;
     ctx.lineWidth = paint.ring * px;
     ctx.stroke(path);

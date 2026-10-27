@@ -16,7 +16,7 @@ import { askForUsername } from '../site/src/ui/username.js';
 import { openSyncSheet } from '../site/src/ui/syncsheet.js';
 import { mountViewer } from '../site/src/ui/viewer.js';
 import { mountWalls } from '../site/src/ui/walls.js';
-import { HoldPaths, PAINT, WallView, outlinePad } from '../site/src/ui/wallview.js';
+import { HoldPaths, PAINT, WallView, drawWall, outlinePad } from '../site/src/ui/wallview.js';
 import { h, keyboard, openSheet, promptDialog } from '../site/src/ui/dom.js';
 
 // These tests put the real screens on the page and use them the way a person would: tapping, typing, swiping, pinching.
@@ -1384,4 +1384,38 @@ test('share sheet: it says what a SprayWall link is', async () => {
   const note = [...topSheet().querySelectorAll('.note')].find((el) => el.textContent.includes('SprayWall link'));
   assert.ok(note && note.textContent.includes('Share a link') && note.textContent.includes('adds that climb'), 'it explains where a link comes from and what it does');
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+});
+
+test('viewing a climb: the inside of a lit hold is not washed with its colour, the ring is; the editor and thumbnails keep the wash', async () => {
+  const photo = document.createElement('canvas');
+  photo.width = photo.height = 200;
+  const pctx = photo.getContext('2d');
+  pctx.fillStyle = '#808080';
+  pctx.fillRect(0, 0, 200, 200);
+  const hold = { id: 1, x: 0.5, y: 0.5, r: 0.1, outline: [[0.3, 0.3], [0.7, 0.3], [0.7, 0.7], [0.3, 0.7]] };
+  const centre = (paint) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 200;
+    const ctx = canvas.getContext('2d');
+    drawWall(ctx, 200, 200, photo, [hold], { 1: 'start' }, paint, 1, new HoldPaths(200, 200, 1.5));
+    return [...ctx.getImageData(100, 100, 1, 1).data.slice(0, 3)];
+  };
+  assert.eq(centre(PAINT.climb), [128, 128, 128], 'no wash inside the hold');
+  assert.eq(centre(PAINT.climbBright), [128, 128, 128]);
+  const washed = centre(PAINT.editorClean);
+  assert.ok(washed[1] > washed[0] + 3, `the editor still washes it with the Start green (${washed})`);
+  assert.ok(centre(PAINT.thumb)[1] > 128, 'so do the thumbnails');
+  const ring = (paint) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 200;
+    const ctx = canvas.getContext('2d');
+    drawWall(ctx, 200, 200, photo, [hold], { 1: 'start' }, paint, 1, new HoldPaths(200, 200, 1.5));
+    const data = ctx.getImageData(0, 0, 200, 200).data;
+    let green = 0;
+    for (let i = 0; i < data.length; i += 4) if (data[i + 1] > 180 && data[i] < 100 && data[i + 2] < 120) green++;
+    return green;
+  };
+  assert.ok(ring(PAINT.climb) > 100, 'the ring is still drawn');
+  const back = { ...PAINT.climb, tint: 0.16 };
+  assert.ok(centre(back)[1] > centre(PAINT.climb)[1] + 3, 'the wash comes back with tint 0.16');
 });

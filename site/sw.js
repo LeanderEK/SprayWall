@@ -2,7 +2,7 @@
 // signal afterwards. Run `python tools/stamp.py` after changing any file in this folder: it rewrites the two lines below
 // (the list of files to save, and a version made from their contents) so phones notice the new version.
 
-const VERSION = 'db693d5b27bb';
+const VERSION = 'd40c17aea540';
 const ASSETS = [
   "./",
   "./icons/apple-touch-icon.png",
