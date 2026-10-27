@@ -1,6 +1,8 @@
 // Small helpers for building the screens. Text is always put in with textContent / text nodes, never as HTML, so a name
 // or comment that arrives in a shared climb can never run as code.
 
+import { MAX_STARS } from '../domain/climbs.js';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** h('div', { class: 'row', onclick: fn }, 'text', otherElement, [more, children]) */
@@ -61,6 +63,7 @@ const ICONS = {
   mountain: [['path', { d: 'M2 20L9 8l4 6 3-4 6 10z' }]],
   plus: [['path', { d: 'M12 5v14M5 12h14' }]],
   file: [['path', { d: 'M6 3h8l4 4v14H6z' }], ['path', { d: 'M14 3v4h4' }]],
+  heart: [['path', { d: 'M12 20.5S3.5 15.3 2.6 9.9C2.1 6.6 4.2 4 7 4c2 0 3.6 1.1 5 3.1C13.4 5.1 15 4 17 4c2.8 0 4.9 2.6 4.4 5.9-.9 5.4-9.4 10.6-9.4 10.6z' }]],
   star: [['path', { d: 'M12 3l2.7 5.7 6.3.8-4.6 4.3 1.2 6.2L12 17l-5.6 3 1.2-6.2L3 9.5l6.3-.8z' }]],
   link: [['path', { d: 'M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1' }], ['path', { d: 'M14 10a4 4 0 00-5.7 0l-3 3A4 4 0 0011 18.7l1-1' }]],
 };
@@ -79,7 +82,7 @@ export function iconButton(name, label, onclick, extra = {}) {
 /** The stars of a climb; with onSelect they can be tapped, and tapping the current rating clears it. */
 export function stars(count, { size = 18, onSelect = null } = {}) {
   const row = h('div', { class: onSelect ? 'stars stars-input' : 'stars' });
-  for (let i = 1; i <= 5; i++) {
+  for (let i = 1; i <= MAX_STARS; i++) {
     const star = icon('star', size);
     star.classList.add(i <= count ? 'star-on' : 'star-off');
     if (onSelect) {
@@ -105,11 +108,78 @@ export function toast(message, action = null) {
   toastTimer = setTimeout(() => el.remove(), action ? 12000 : 3800);
 }
 
+// ---- the keyboard ----
+
+// Where the part of the screen the phone's keyboard leaves free is. A phone's browser does not shrink the page when the keyboard opens (the
+// page stays as tall as it was and the keyboard covers its lower part), so a panel fixed to the bottom of the page would sit behind the keyboard
+// and hide what is being typed. `keyboard.viewport` is that visible part (the visual viewport); the tests swap it for a pretend one.
+export const keyboard = { viewport: () => window.visualViewport ?? null };
+
+/** How far up from the bottom of the page the visible part ends, and where it starts and how tall it is (all in pixels). Zero `lift` = no keyboard. */
+export function visibleArea(viewport, pageHeight) {
+  const top = viewport.offsetTop || 0;
+  return { top, height: viewport.height, lift: Math.max(0, Math.round(pageHeight - top - viewport.height)) };
+}
+
+/**
+ * Keeps a sheet (stuck to the bottom) or a dialog (in the middle, with `centered`) inside the part of the screen the keyboard leaves free,
+ * and scrolls whatever is being typed into view. Returns a function that stops it.
+ */
+export function followKeyboard(el, { centered = false } = {}) {
+  const viewport = keyboard.viewport();
+  if (!viewport) return () => {};
+  const fit = () => {
+    const area = visibleArea(viewport, window.innerHeight);
+    if (area.lift < 1) {
+      el.style.bottom = el.style.top = el.style.maxHeight = '';
+      if (centered) el.style.overflowY = '';
+      return;
+    }
+    if (centered) {
+      el.style.top = `${area.top + area.height / 2}px`;
+      el.style.maxHeight = `${Math.max(120, area.height - 24)}px`;
+      el.style.overflowY = 'auto';
+    } else {
+      el.style.bottom = `${area.lift}px`;
+      el.style.maxHeight = `${Math.max(120, area.height - 8)}px`;
+    }
+    const typing = el.querySelector(':focus');
+    if (typing) typing.scrollIntoView({ block: 'center' });
+  };
+  const focused = (event) => {
+    if (event.target.matches?.('input, textarea')) setTimeout(() => { fit(); event.target.scrollIntoView({ block: 'center' }); }, 300);
+  };
+  viewport.addEventListener('resize', fit);
+  viewport.addEventListener('scroll', fit);
+  el.addEventListener('focusin', focused);
+  fit();
+  return () => {
+    viewport.removeEventListener('resize', fit);
+    viewport.removeEventListener('scroll', fit);
+    el.removeEventListener('focusin', focused);
+  };
+}
+
+/**
+ * A slider with a tick mark at every stop, and a number under some of them. `labelAt(stop)` gives the text under a stop ('' for none). The
+ * slider's own thumb is drawn at a known size so that the ticks line up with it.
+ */
+export function tickedSlider(input, { stops, labelAt = () => '' }) {
+  const ticks = h('div', { class: 'slider-ticks', 'aria-hidden': 'true' });
+  for (let stop = 0; stop < stops; stop++) {
+    const label = labelAt(stop);
+    ticks.append(h('span', { class: label ? 'tick major' : 'tick', style: { left: `calc(var(--thumb) / 2 + (100% - var(--thumb)) * ${stops > 1 ? stop / (stops - 1) : 0})` } }, label ? h('span', { class: 'tick-label' }, label) : null));
+  }
+  return h('div', { class: 'slider' }, input, ticks);
+}
+
 /** A panel that slides up from the bottom. Returns { close }. */
 export function openSheet(title, content, { onClose = null } = {}) {
   const backdrop = h('div', { class: 'backdrop' });
   const panel = h('div', { class: 'sheet', role: 'dialog', 'aria-label': title }, h('div', { class: 'sheet-grip' }), title ? h('h2', {}, title) : null, content);
+  const stopFollowing = followKeyboard(panel);
   const close = () => {
+    stopFollowing();
     backdrop.remove();
     panel.remove();
     document.removeEventListener('keydown', onKey);
@@ -123,17 +193,17 @@ export function openSheet(title, content, { onClose = null } = {}) {
 }
 
 /** A question in the middle of the screen. Resolves true for the main button, false otherwise. */
-export function confirmDialog({ title, text, confirmLabel = 'OK', cancelLabel = 'Cancel', danger = false }) {
+export function confirmDialog({ title, text, confirmLabel = 'OK', cancelLabel = 'Cancel', danger = false, onTop = false }) {
   return new Promise((resolve) => {
     const finish = (answer) => {
       backdrop.remove();
       dialog.remove();
       resolve(answer);
     };
-    const backdrop = h('div', { class: 'backdrop', onclick: () => finish(false) });
+    const backdrop = h('div', { class: onTop ? 'backdrop top' : 'backdrop', onclick: () => finish(false) });
     const dialog = h(
       'div',
-      { class: 'dialog', role: 'alertdialog', 'aria-label': title },
+      { class: onTop ? 'dialog top' : 'dialog', role: 'alertdialog', 'aria-label': title },
       h('h2', {}, title),
       text ? h('p', {}, text) : null,
       h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'text-btn', onclick: () => finish(false) }, cancelLabel), h('button', { type: 'button', class: danger ? 'text-btn danger' : 'text-btn', onclick: () => finish(true) }, confirmLabel)),
@@ -146,6 +216,7 @@ export function confirmDialog({ title, text, confirmLabel = 'OK', cancelLabel = 
 export function promptDialog({ title, label, value = '', confirmLabel = 'Save', maxLength = 80 }) {
   return new Promise((resolve) => {
     const finish = (answer) => {
+      stopFollowing();
       backdrop.remove();
       dialog.remove();
       resolve(answer);
@@ -154,6 +225,7 @@ export function promptDialog({ title, label, value = '', confirmLabel = 'Save', 
     const backdrop = h('div', { class: 'backdrop', onclick: () => finish(null) });
     const dialog = h('div', { class: 'dialog', role: 'dialog', 'aria-label': title }, h('h2', {}, title), h('label', { class: 'field-label' }, label, input), h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'text-btn', onclick: () => finish(null) }, 'Cancel'), h('button', { type: 'button', class: 'text-btn', onclick: () => finish(input.value) }, confirmLabel)));
     document.body.append(backdrop, dialog);
+    const stopFollowing = followKeyboard(dialog, { centered: true });
     input.focus();
     input.select();
   });

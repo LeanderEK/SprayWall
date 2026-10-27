@@ -137,17 +137,17 @@ test('climbs: a new climb is a draft with your username on it; once uploaded it 
   assert.eq(plan.items[0].status, 'same', 'a file cannot replace an uploaded climb');
 });
 
-test('ratings: each phone keeps its own, 1 to 5, and they never travel with a climb', async () => {
+test('ratings: each phone keeps its own, 1 to 3 stars, and they never travel with a climb', async () => {
   const { repo } = await freshRepo();
   const climb = await repo.saveClimb(climbData());
   assert.eq(await repo.getRating(climb.id), 0);
   let heard = 0;
   repo.onChange(() => heard++);
-  assert.eq(await repo.setRating(climb.id, 4), 4);
+  assert.eq(await repo.setRating(climb.id, 2), 2);
   assert.eq(heard, 1, 'the screens are told');
-  assert.eq(await repo.getRating(climb.id), 4);
-  assert.eq([...(await repo.getRatings())], [[climb.id, 4]]);
-  assert.eq(await repo.setRating(climb.id, 99), 5, 'too many stars is held at 5');
+  assert.eq(await repo.getRating(climb.id), 2);
+  assert.eq([...(await repo.getRatings())], [[climb.id, 2]]);
+  assert.eq(await repo.setRating(climb.id, 99), 3, 'too many stars is held at 3');
   assert.eq(await repo.setRating(climb.id, 0), 0);
   assert.eq((await repo.getRatings()).size, 0, '0 takes the rating away');
   await repo.setRating(climb.id, 3);
@@ -183,7 +183,7 @@ test('ratings: the stars old climbs carried become your own ratings, once, and t
   await repo.store.put('climbs', { id: 'old-climb-0002', wallKey: 'av-wall', name: 'Unrated', grade: 3, stars: 0, comment: '', author: '', holds: '1:hand', createdAt: 2, updatedAt: 2 }, 'old-climb-0002');
   await repo.store.put('climbs', { id: 'old-climb-0003', wallKey: 'av-wall', name: 'Gone', deletedAt: 9, updatedAt: 9, stars: 4 }, 'old-climb-0003');
   assert.eq(await repo.upgradeData(), 3);
-  assert.eq([...(await repo.getRatings())], [['old-climb-0001', 5]]);
+  assert.eq([...(await repo.getRatings())], [['old-climb-0001', 3]], 'five stars in the old days is all three now');
   assert.ok(!('stars' in (await repo.getClimb('old-climb-0001'))));
   assert.eq(await repo.upgradeData(), 0, 'the second time there is nothing to do');
 });
@@ -451,12 +451,12 @@ test('board: climbs are uploaded one at a time by their maker and then reach eve
   await assert.rejects(b.repo.deleteClimb(one.id), 'cannot be deleted');
   assert.eq(await kindOf(b.sync.upload(one.id)), 'mine', 'a climb from the board is already uploaded');
 
-  await a.repo.setRating(one.id, 5);
+  await a.repo.setRating(one.id, 3);
   await a.repo.setSent(one.id);
   assert.eq(await b.repo.getRating(one.id), 0, 'ratings stay on their own phone');
   assert.eq(await b.repo.getSentAt(one.id), 0, 'so do sent marks');
   await b.repo.setRating(one.id, 2);
-  assert.eq(await a.repo.getRating(one.id), 5);
+  assert.eq(await a.repo.getRating(one.id), 3);
 
   tick(backend);
   const bea = await b.repo.saveClimb(climbData({ name: 'Bea\'s climb' }));

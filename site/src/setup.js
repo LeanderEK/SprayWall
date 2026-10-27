@@ -6,7 +6,7 @@ import { importWallPack } from './data/wallimport.js';
 
 /**
  * Everyone has a username. With a Firebase project it comes from an account (unique, and the same on every phone): the
- * account dialog is shown (with a "Later" button) unless the person already skipped it or is signed in. Without a Firebase
+ * account dialog is shown (with a "Start offline" button) unless the person already skipped it or is signed in. Without a Firebase
  * project a name on this phone is all there is. Returns 'account', 'skipped' or 'local'.
  */
 export async function ensureIdentity({ repo, sync, askForAccount, askForUsername }) {

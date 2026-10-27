@@ -26,15 +26,16 @@ Common questions are answered at the [end](#questions).
 | **Computer** | Just open the address in Chrome, Edge or Safari. (Chrome and Edge can also install it from the address bar.) |
 
 Open it once with a connection and give it a few seconds: it saves itself on the device. From then on it opens with no signal
-at all (try aeroplane mode). When a new version is out it says **A new version of SprayWall is ready**; tap **Update**.
+at all (try aeroplane mode). New versions install themselves: you do not tap anything (see [Offline and updates](#offline-and-updates)).
 
 > iPhone / iPad: use the Home Screen icon every time. Safari tabs and the Home Screen app keep **separate** data, so climbs
 > made in one do not appear in the other.
 
 ### Make your account
 
-The first time it opens, SprayWall asks you to create an account: a **username** and a **password**. (You can tap **Later** to look
-around first; you need the account to upload climbs and to receive other people's.)
+The first time it opens, SprayWall asks you to create an account: a **username** and a **password**. (You can tap
+**Start offline** instead: it says that you will not see any climbs from other people and can only make your own, and asks you to
+confirm. You need an account to upload climbs and to receive other people's, and you can make one later from the share icon.)
 
 * The username is **yours alone** (nobody else can have it), 3 to 20 letters, digits, dashes or underscores, always lowercase.
   It is shown on every climb you upload.
@@ -46,7 +47,7 @@ around first; you need the account to upload climbs and to receive other people'
 
 ### The AV wall and its shared climbs: automatic
 
-A **wall** is a photo of the board plus a map of where every hold is. Straight after you make your account (or tap Later) a "Setting up"
+A **wall** is a photo of the board plus a map of where every hold is. Straight after you make your account (or start offline) a "Setting up"
 screen downloads the **AV wall** and adds it, and, once you have an account, **joins the AV board**, so every climb anyone has
 uploaded is already in your list. That takes a few seconds, once. If there was no connection it says so and tries again next time;
 you can also tap the **mountain icon** (Walls) and **Get the AV wall**.
@@ -73,11 +74,13 @@ you can also tap the **mountain icon** (Walls) and **Get the AV wall**.
     the climb. A small **map** of the whole wall shows where you are (tap or drag on it to go somewhere), a button for each
     **face** takes you straight there, and the **arrows** next to the map go to the previous or next climb (a swipe moves you
     about on the wall instead, because you are zoomed in).
-* **Rate it:** in the ⓘ panel tap the stars (tap the same star again to take it away).
+* **Rate it:** in the ⓘ panel tap the stars, up to **3** (tap the same star again to take it away).
+* **Heart it:** tap the **heart** to the left of the climb's name. The list shows a ♥ on hearted climbs and the Filters have a
+  **Hearted** choice, so you can keep a short list of favourites.
 * **Mark it as sent** when you have climbed it: the **Mark sent** button above the climb turns green (**✓ Sent**).
   Tap again to undo. The list shows ✓ Sent and you can filter by it.
 
-Your ratings and sent marks are **private**: they stay on your phone and nobody else ever sees them.
+Your ratings, hearts and sent marks are **private**: they stay on your phone and nobody else ever sees them.
 
 ### Set a climb
 
@@ -85,7 +88,10 @@ Your ratings and sent marks are **private**: they stay on your phone and nobody 
 2. Pick a hold type at the bottom (**Start**, **Hand**, **Finish**, **Foot**), then **tap every hold** you want to be that type.
    Pick another type and keep tapping. Tap a lit hold again to unlight it; **Erase** removes holds; the **undo** arrow takes
    back your last tap; the **eye** shows a thin white outline round every hold (they are hidden to start with) if you want to see exactly what you can tap.
-3. Tap **Save**, give it a name, set the grade with the slider (or leave it as None), add a comment if you like, and **Save**.
+3. A climb needs **at least one Start hold and one Finish hold**: until it has both, Save is switched off and the hint above the
+   hold types says which one is missing.
+4. Tap **Save**, give it a name, set the grade with the slider (it has a tick for every grade; leave it at None if you like), add a
+   comment if you like, and **Save**. The panel moves up out of the way of the keyboard, so you can see what you type.
 
 A new climb is a **draft**: it lives only on your phone (the list marks it **Draft**) and you can edit or delete it whenever you
 like with the pencil and bin buttons.
@@ -170,8 +176,9 @@ There are two ways, and you can use either or both.
   plus a name, grade (V0 to V17 or none), comment, author and dates. It points at holds by number, which is why hold numbers
   must never change once climbs exist.
 * A climb is a **draft** (only on your device; editable) or **uploaded** (on a board; final). Climbs from friends arrive as uploaded.
-* **Ratings** (1 to 5 stars) and **sent marks** are stored separately from climbs, only on your device, so they can never
-  be shared by accident: they are not in links, files or boards.
+* **Ratings** (1 to 3 stars), **hearts** and **sent marks** are stored separately from climbs, only on your device, so they can
+  never be shared by accident: they are not in links, files or boards. (Ratings given when there were five stars were turned into
+  the same share of three, once.)
 
 ### Accounts
 
@@ -213,9 +220,11 @@ flooded, the owner can start a new board and put its code in `site/src/defaults.
 ### Offline and updates
 
 On the first visit a service worker (`site/sw.js`) saves every file of the app. After that the app starts from the saved copy.
-When a new version is published, the phone notices the changed version number, downloads it quietly, and shows **Update**; the
-old version keeps running until you tap it, so the app never changes under you mid-climb. `tools/stamp.py` writes the file list and
-version number; the publishing workflow runs it for you.
+When a new version is published, the phone notices the changed version number (when the app opens, and again whenever it comes back to
+the front), downloads it quietly, and then **installs it by itself** as soon as nothing is half done: no climb being set with changes
+that are not saved, and no sheet or question open. The app then reloads once. Nobody has to tap anything, and the app never changes
+under you in the middle of setting a climb. `tools/stamp.py` writes the file list and version number; the publishing workflow runs it
+for you.
 
 ### Costs and limits
 
@@ -450,7 +459,7 @@ climbs return. Drafts, ratings and sent marks were only on the old phone (unless
 
 **Can I use it without an account?**
 Not in the public app: every user makes an account the first time (it needs a connection once), so that every climb has a real,
-unique username on it. A phone that already had a name from an earlier version can tap **Later** and carry on locally, setting, viewing,
+unique username on it. A phone can tap **Start offline** and carry on locally (after a confirmation), setting, viewing,
 rating and sharing climbs by file or link, but it cannot upload or receive friends' climbs until it signs in. A copy with no
 Firebase project (part 4) has no accounts and only asks for a name.
 

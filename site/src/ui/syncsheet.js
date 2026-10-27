@@ -58,7 +58,7 @@ export async function openSyncSheet() {
     } else if (!account) {
       pieces.push(
         h('p', {}, 'Boards need your account, so that every climb has its maker\'s username on it and nobody can pass as somebody else. Your username is unique and works on any phone.'),
-        h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn primary', onclick: async () => { await askForAccount({ sync, canSkip: true }); render(); } }, 'Sign in or create account')),
+        h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn primary', onclick: async () => { await askForAccount({ sync, canSkip: true, skipKind: 'cancel' }); render(); } }, 'Sign in or create account')),
       );
     } else if (!setup) {
       const codeInput = h('input', { class: 'field', type: 'text', placeholder: 'k7f2-9xqm-c4ta-p8dn', 'aria-label': 'Board code', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false' });

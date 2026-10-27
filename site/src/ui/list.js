@@ -1,7 +1,7 @@
 import { app, wallPicture } from '../app.js';
 import { LONG_THUMB_ASPECT, hasFaces, thumbCrop } from '../domain/faces.js';
-import { MAX_GRADE, SCOPES, SENT_FILTERS, SORTS, applyQuery, defaultQuery, filterCount, gradeFiltered, gradeLabel, isMine, isUploaded, marksOf } from '../domain/climbs.js';
-import { h, icon, iconButton, isIos, isStandalone, openSheet, stars } from './dom.js';
+import { LIKED_FILTERS, MAX_GRADE, MAX_STARS, SCOPES, SENT_FILTERS, SORTS, applyQuery, defaultQuery, filterCount, gradeFiltered, gradeLabel, isMine, isUploaded, marksOf } from '../domain/climbs.js';
+import { h, icon, iconButton, isIos, isStandalone, openSheet, stars, tickedSlider } from './dom.js';
 import { openSharingSheet } from './sharing.js';
 import { PAINT, drawThumb } from './wallview.js';
 
@@ -18,12 +18,16 @@ export function appBar({ title, subtitle = null, back = null, actions = [] }) {
   );
 }
 
+// Ticks on the grade sliders: one for every grade, and a number under V0, V5, V10, V15 and the hardest.
+const gradeTicks = { stops: MAX_GRADE + 1, labelAt: (stop) => (stop % 5 === 0 || stop === MAX_GRADE ? `V${stop}` : '') };
+
 export function filterSummary(query) {
   const parts = [];
   if (gradeFiltered(query)) parts.push(query.minGrade === query.maxGrade ? gradeLabel(query.minGrade) : `${gradeLabel(query.minGrade)}–${gradeLabel(query.maxGrade)}`);
   if (query.minStars > 0) parts.push(`${query.minStars}★+`);
   if (query.scope && query.scope !== 'all') parts.push(SCOPES.find(([value]) => value === query.scope)?.[1] ?? query.scope);
   if (query.sent && query.sent !== 'all') parts.push(SENT_FILTERS.find(([value]) => value === query.sent)?.[1] ?? query.sent);
+  if (query.liked && query.liked !== 'all') parts.push(`♥ ${LIKED_FILTERS.find(([value]) => value === query.liked)?.[1] ?? query.liked}`);
   return parts.length ? parts.join(' · ') : 'Filters';
 }
 
@@ -55,22 +59,24 @@ export async function mountList(root) {
     const starChips = h('div', { class: 'chip-row wrap' });
     const scopeChips = h('div', { class: 'chip-row wrap' });
     const sentChips = h('div', { class: 'chip-row wrap' });
+    const likedChips = h('div', { class: 'chip-row wrap' });
     const refresh = () => {
+      likedChips.replaceChildren(...LIKED_FILTERS.map(([value, label]) => h('button', { type: 'button', class: value === (q.liked || 'all') ? 'chip selected' : 'chip', onclick: () => { q.liked = value; refresh(); renderRows(); } }, label)));
       sentChips.replaceChildren(...SENT_FILTERS.map(([value, label]) => h('button', { type: 'button', class: value === (q.sent || 'all') ? 'chip selected' : 'chip', onclick: () => { q.sent = value; refresh(); renderRows(); } }, label)));
       scopeChips.replaceChildren(...SCOPES.map(([value, label]) => h('button', { type: 'button', class: value === (q.scope || 'all') ? 'chip selected' : 'chip', onclick: () => { q.scope = value; refresh(); renderRows(); } }, label)));
       gradeText.textContent = gradeFiltered(q) ? `${gradeLabel(q.minGrade)} – ${gradeLabel(q.maxGrade)}` : 'any';
-      starChips.replaceChildren(...[0, 1, 2, 3, 4, 5].map((n) => h('button', { type: 'button', class: n === q.minStars ? 'chip selected' : 'chip', onclick: () => { q.minStars = n; refresh(); renderRows(); } }, n === 0 ? 'Any' : `${n}★+`)));
+      starChips.replaceChildren(...Array.from({ length: MAX_STARS + 1 }, (_, n) => n).map((n) => h('button', { type: 'button', class: n === q.minStars ? 'chip selected' : 'chip', onclick: () => { q.minStars = n; refresh(); renderRows(); } }, n === 0 ? 'Any' : `${n}★+`)));
       renderRows();
     };
     minSlider.addEventListener('input', () => { q.minGrade = Math.min(Number(minSlider.value), q.maxGrade); minSlider.value = q.minGrade; refresh(); });
     maxSlider.addEventListener('input', () => { q.maxGrade = Math.max(Number(maxSlider.value), q.minGrade); maxSlider.value = q.maxGrade; refresh(); });
     const reset = () => {
-      Object.assign(q, { minGrade: 0, maxGrade: MAX_GRADE, minStars: 0, scope: 'all', sent: 'all' });
+      Object.assign(q, { minGrade: 0, maxGrade: MAX_GRADE, minStars: 0, scope: 'all', sent: 'all', liked: 'all' });
       minSlider.value = 0;
       maxSlider.value = MAX_GRADE;
       refresh();
     };
-    openSheet('Filters', h('div', { class: 'sheet-body' }, h('div', { class: 'row-between' }, h('h3', {}, 'Grade'), gradeText), h('div', { class: 'range-pair' }, h('span', {}, 'Easiest'), minSlider, h('span', {}, 'Hardest'), maxSlider), h('h3', {}, 'Your stars'), starChips, h('h3', {}, 'Show'), scopeChips, h('h3', {}, 'Sent (only you see this)'), sentChips, h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'text-btn', onclick: reset }, 'Reset'))));
+    openSheet('Filters', h('div', { class: 'sheet-body' }, h('div', { class: 'row-between' }, h('h3', {}, 'Grade'), gradeText), h('div', { class: 'range-pair' }, h('span', {}, 'Easiest'), tickedSlider(minSlider, gradeTicks), h('span', {}, 'Hardest'), tickedSlider(maxSlider, gradeTicks)), h('h3', {}, 'Your stars'), starChips, h('h3', {}, 'Show'), scopeChips, h('h3', {}, 'Sent (only you see this)'), sentChips, h('h3', {}, 'Hearts (only you see this)'), likedChips, h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'text-btn', onclick: reset }, 'Reset'))));
     refresh();
   }
 
@@ -107,7 +113,7 @@ export async function mountList(root) {
         'button',
         { type: 'button', class: 'row', onclick: () => nav.go(`/climb/${climb.id}`) },
         thumb,
-        h('div', { class: 'row-text' }, h('div', { class: 'row-name' }, climb.name), stars(climb.stars, { size: 16 }), climb.comment ? h('div', { class: 'row-comment' }, climb.comment) : null, climb.author || !isUploaded(climb) || climb.sent ? h('div', { class: 'row-author' }, climb.author ? `by ${climb.author}` : '', isMine(climb, me) && !isUploaded(climb) ? h('span', { class: 'badge muted' }, 'Draft') : null, climb.sent ? h('span', { class: 'badge ok' }, '✓ Sent') : null) : null),
+        h('div', { class: 'row-text' }, h('div', { class: 'row-name' }, climb.name), stars(climb.stars, { size: 16 }), climb.comment ? h('div', { class: 'row-comment' }, climb.comment) : null, climb.author || !isUploaded(climb) || climb.sent || climb.liked ? h('div', { class: 'row-author' }, climb.author ? `by ${climb.author}` : '', isMine(climb, me) && !isUploaded(climb) ? h('span', { class: 'badge muted' }, 'Draft') : null, climb.sent ? h('span', { class: 'badge ok' }, '✓ Sent') : null, climb.liked ? h('span', { class: 'badge heart', 'aria-label': 'Hearted' }, '♥') : null) : null),
         h('div', { class: 'row-grade' }, gradeLabel(climb.grade)),
       );
     });
@@ -120,7 +126,8 @@ export async function mountList(root) {
     me = await repo.authorName();
     const ratings = await repo.getRatings();
     const sentMarks = await repo.getSent();
-    climbs = wall ? (await repo.listClimbs(wall.key)).map((climb) => ({ ...climb, stars: ratings.get(climb.id) || 0, sent: sentMarks.get(climb.id) || 0 })) : [];
+    const likes = await repo.getLikes();
+    climbs = wall ? (await repo.listClimbs(wall.key)).map((climb) => ({ ...climb, stars: ratings.get(climb.id) || 0, sent: sentMarks.get(climb.id) || 0, liked: likes.has(climb.id) })) : [];
     picture = wall ? await wallPicture(wall) : null;
     renderRows();
   }

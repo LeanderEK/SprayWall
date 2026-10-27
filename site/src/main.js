@@ -9,6 +9,7 @@ import { mountEditor } from './ui/editor.js';
 import { mountImporter } from './ui/importer.js';
 import { mountList } from './ui/list.js';
 import { ensureDefaults, ensureIdentity, refreshDefaultWall } from './setup.js';
+import { whenQuiet } from './update.js';
 import { askForAccount } from './ui/account.js';
 import { askForUsername } from './ui/username.js';
 import { mountViewer } from './ui/viewer.js';
@@ -193,7 +194,7 @@ function startSync() {
   app.sync.start();
 }
 
-/** Saves the app on the phone so it opens with no signal, and offers new versions when they arrive. */
+/** Saves the app on the phone so it opens with no signal, and installs new versions by itself when they arrive (see update.js). */
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator) || !(location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) return;
   if (new URLSearchParams(location.search).has('nosw')) {
@@ -203,13 +204,19 @@ function registerServiceWorker() {
     return;
   }
   navigator.serviceWorker.register('sw.js').then((registration) => {
-    const offer = (worker) => toast('A new version of SprayWall is ready.', { label: 'Update', run: () => worker.postMessage('skip-waiting') });
-    if (registration.waiting && navigator.serviceWorker.controller) offer(registration.waiting);
+    // Nothing is half done on screen: no climb being set with changes that are not saved, and no sheet or question open.
+    const quiet = () => !app.leaveGuard && !document.querySelector('.sheet, .dialog');
+    const install = (worker) => whenQuiet(quiet, () => worker.postMessage('skip-waiting'));
+    if (registration.waiting && navigator.serviceWorker.controller) install(registration.waiting);
     registration.addEventListener('updatefound', () => {
       const worker = registration.installing;
       worker?.addEventListener('statechange', () => {
-        if (worker.state === 'installed' && navigator.serviceWorker.controller) offer(worker);
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) install(worker);
       });
+    });
+    // A phone keeps an app that is open in the background for days: look for a new version whenever it comes back to the front.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') registration.update().catch(() => {});
     });
   }).catch(() => {});
   // When a new version takes over, reload once so the page and its files match. (Not on the very first visit, when the

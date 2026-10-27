@@ -3,7 +3,7 @@ import { MAX_GRADE, gradeLabel, gradeToStop, marksOf, stopToGrade } from '../dom
 import { hasFaces } from '../domain/faces.js';
 import { formatMarks } from '../domain/holds.js';
 import { ROLES } from '../domain/roles.js';
-import { confirmDialog, h, icon, iconButton, openSheet, toast } from './dom.js';
+import { confirmDialog, h, icon, iconButton, openSheet, tickedSlider, toast } from './dom.js';
 import { FaceBar } from './facebar.js';
 import { appBar } from './list.js';
 import { PAINT, WallView } from './wallview.js';
@@ -39,6 +39,9 @@ export async function mountEditor(root, { id }) {
     saving: false,
   };
   const count = () => Object.keys(state.marks).length;
+  // A climb needs somewhere to start and somewhere to finish: at least one Start hold and one Finish hold.
+  const missing = () => ['start', 'finish'].filter((code) => !Object.values(state.marks).includes(code)).map((code) => (code === 'start' ? 'a Start hold' : 'a Finish hold'));
+  const saveable = () => count() > 0 && missing().length === 0;
 
   const view = new WallView({ onTapHold: tap });
   view.setWall(wall, picture);
@@ -62,10 +65,10 @@ export async function mountEditor(root, { id }) {
   root.append(bar, ...(facebar ? [facebar.el] : []), h('div', { class: 'stage' }, view.el), panel);
 
   function refresh() {
-    hint.textContent = count() === 0 ? 'Pick a type, then tap holds on the wall.' : 'Tap a lit hold again to unlight it.';
+    hint.textContent = count() === 0 ? 'Pick a type, then tap holds on the wall.' : missing().length ? `To save: add ${missing().join(' and ')}. Pick the type, then tap a hold.` : 'Tap a lit hold again to unlight it.';
     clearButton.style.visibility = count() === 0 ? 'hidden' : 'visible';
     undoButton.disabled = state.undo.length === 0;
-    saveButton.disabled = count() === 0;
+    saveButton.disabled = !saveable();
     for (const item of brushButtons) item.button.classList.toggle('selected', item.code === state.brush);
     view.setMarks(state.marks);
     facebar?.setMarks(state.marks);
@@ -120,7 +123,7 @@ export async function mountEditor(root, { id }) {
   }
 
   function openSave() {
-    if (count() === 0) return;
+    if (!saveable()) return toast(`A climb needs ${missing().join(' and ') || 'some holds'}.`);
     const nameInput = h('input', { class: 'field', type: 'text', maxlength: 80, value: state.name, 'aria-label': 'Name', autocomplete: 'off', oninput: () => { state.name = nameInput.value; state.dirty = true; app.leaveGuard = guard; update(); } });
     const gradeText = h('div', { class: 'grade-value' });
     const slider = h('input', { type: 'range', min: 0, max: MAX_GRADE + 1, step: 1, value: gradeToStop(state.grade), 'aria-label': 'Grade', oninput: () => { state.grade = stopToGrade(Number(slider.value)); state.dirty = true; app.leaveGuard = guard; update(); } });
@@ -148,7 +151,7 @@ export async function mountEditor(root, { id }) {
       }
     }
     update();
-    const sheet = openSheet('Save climb', h('div', { class: 'sheet-body' }, h('label', { class: 'field-label' }, 'Name', nameInput), h('div', { class: 'row-between' }, h('h3', {}, 'Grade'), gradeText), slider, commentInput, h('p', { class: 'note' }, 'Saved on this phone as a draft. You can upload it from the climb when it is ready; after that it cannot be changed.'), saveBtn));
+    const sheet = openSheet('Save climb', h('div', { class: 'sheet-body' }, h('label', { class: 'field-label' }, 'Name', nameInput), h('div', { class: 'row-between' }, h('h3', {}, 'Grade'), gradeText), tickedSlider(slider, { stops: MAX_GRADE + 2, labelAt: (stop) => ({ 0: 'None', 6: 'V5', 11: 'V10', 16: 'V15', [MAX_GRADE + 1]: `V${MAX_GRADE}` })[stop] || '' }), commentInput, h('p', { class: 'note' }, 'Saved on this phone as a draft. You can upload it from the climb when it is ready; after that it cannot be changed.'), saveBtn));
     nameInput.focus({ preventScroll: true });
   }
 

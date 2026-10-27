@@ -92,7 +92,7 @@ export async function openSharingSheet() {
   };
   const signIn = async () => {
     sheet.close();
-    await askForAccount({ sync: app.sync, canSkip: true });
+    await askForAccount({ sync: app.sync, canSkip: true, skipKind: 'cancel' });
   };
   const changeName = async () => {
     const next = await promptDialog({ title: 'Change username', label: 'Username', value: name, confirmLabel: 'Save', maxLength: 20 });
@@ -128,6 +128,7 @@ export async function openSharingSheet() {
     h('h3', {}, 'Import climbs'),
     h('div', { class: 'row-buttons' }, filePickerButton('From a file', { accept: '.json,application/json,.spraywall', multiple: true, onFiles: (files) => { sheet.close(); importFiles(files); } })),
     h('label', { class: 'field-label' }, 'Or paste a link', pasteBox),
+    h('p', { class: 'note' }, 'A SprayWall link is what a friend gets when they open a climb and tap Share, then Share a link. It holds the climb itself, so pasting it here adds that climb to your list.'),
     h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn', onclick: openPasted }, 'Open pasted link')),
     isIos() && !isStandalone() ? h('p', { class: 'note' }, 'Tip: on an iPhone, links open in Safari, which keeps its own copy of your climbs. If you use the app from your Home Screen, copy the link, open the app, and paste it here.') : null,
     h('h3', {}, 'Share your climbs'),

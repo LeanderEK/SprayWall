@@ -5,8 +5,10 @@ import { Viewport, ZOOM_MAX, zoomMaxFor } from '../site/src/domain/viewport.js';
 import { MAX_PHOTO_SIDE, maxLongSide } from '../site/src/data/wallimport.js';
 import { cropAround, faceIndexAt, faceLabel, facesOf, hasFaces, marksBounds, thumbCrop } from '../site/src/domain/faces.js';
 import {
-  MAX_GRADE, applyQuery, browseIds, cleanWallName, defaultQuery, filterCount, gradeLabel, gradeToStop, stopToGrade,
+  MAX_GRADE, MAX_STARS, applyQuery, browseIds, cleanWallName, defaultQuery, filterCount, gradeLabel, gradeToStop, stopToGrade,
 } from '../site/src/domain/climbs.js';
+import { whenQuiet } from '../site/src/update.js';
+import { visibleArea } from '../site/src/ui/dom.js';
 import { WallPackError, parseHoldsJson } from '../site/src/domain/wallpack.js';
 import { findFile, readZip } from '../site/src/domain/zip.js';
 
@@ -470,4 +472,42 @@ test('wall photo: an ordinary wall keeps its size limit; a long wall may be long
   const long = maxLongSide(5000, 1900);
   assert.ok(long > 5000 && (long * long) / (5000 / 1900) <= 12_000_000 + 1, `${long} px keeps a 12 million pixel wall within the budget`);
   assert.ok(maxLongSide(1600, 1000) > maxLongSide(1500, 1000), 'a wall longer than 1.5 gets a bigger budget, and never a smaller one');
+});
+
+// ---- hearts, three stars, the keyboard and updates ----
+
+test('stars: there are three, and the Hearted filter shows only the climbs you gave a heart', () => {
+  assert.eq(MAX_STARS, 3);
+  const all = [{ ...climb('1', 'One', 2, 1), liked: true }, { ...climb('2', 'Two', 3, 2) }, { ...climb('3', 'Three', 4, 3), liked: true }];
+  const names = (query) => applyQuery(all, { ...defaultQuery(), ...query }).map((c) => c.name).sort();
+  assert.eq(names({}), ['One', 'Three', 'Two']);
+  assert.eq(names({ liked: 'liked' }), ['One', 'Three']);
+  assert.eq(names({ liked: 'liked', minStars: 2 }), ['Three']);
+  assert.eq([filterCount(defaultQuery()), filterCount({ ...defaultQuery(), liked: 'liked' }), filterCount({ ...defaultQuery(), liked: 'liked', minStars: 1 })], [0, 1, 2]);
+});
+
+test('keyboard: the free part of the screen is worked out from the visual viewport', () => {
+  assert.eq(visibleArea({ height: 800, offsetTop: 0 }, 800), { top: 0, height: 800, lift: 0 });
+  assert.eq(visibleArea({ height: 500, offsetTop: 0 }, 800), { top: 0, height: 500, lift: 300 }, 'a keyboard 300 pixels tall');
+  assert.eq(visibleArea({ height: 500, offsetTop: 40 }, 800), { top: 40, height: 500, lift: 260 }, 'the page has been scrolled up a little');
+  assert.eq(visibleArea({ height: 900, offsetTop: 0 }, 800).lift, 0, 'never below the bottom');
+});
+
+test('updates: a new version takes over as soon as nothing is half done, and not before', () => {
+  let ran = 0;
+  assert.eq(typeof whenQuiet(() => true, () => ran++), 'function');
+  assert.eq(ran, 1, 'when it is quiet already it goes at once');
+  let quiet = false;
+  let look = null;
+  let cleared = 0;
+  whenQuiet(() => quiet, () => ran++, { setTimer: (fn) => { look = fn; return 7; }, clearTimer: (id) => { cleared = id; } });
+  look();
+  assert.eq(ran, 1, 'busy: it waits');
+  quiet = true;
+  look();
+  assert.eq([ran, cleared], [2, 7], 'quiet: it goes, once, and stops looking');
+  let stopped = 0;
+  const cancel = whenQuiet(() => false, () => ran++, { setTimer: () => 9, clearTimer: () => stopped++ });
+  cancel();
+  assert.eq(stopped, 1, 'it can be cancelled');
 });

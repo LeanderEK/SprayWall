@@ -21,6 +21,9 @@ export const newId = () => {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 };
 
+/** A rating from the days of five stars, as a rating out of three: 1-2 became 1, 3-4 became 2, 5 became 3. */
+export const fromFiveStars = (stars) => Math.max(1, Math.min(MAX_STARS, Math.round((Math.min(5, Math.max(1, stars)) * MAX_STARS) / 5)));
+
 export class MemoryStore {
   constructor() {
     this.tables = { walls: new Map(), climbs: new Map(), meta: new Map() };
@@ -113,7 +116,7 @@ export class Repo {
 
   // ---- star ratings (kept on this phone only) ----
 
-  /** Every rating you have given: a Map from climb id to 1-5. */
+  /** Every rating you have given: a Map from climb id to 1-3. */
   async getRatings() {
     const ratings = new Map();
     for (const { k, value } of await this.store.all('meta')) {
@@ -128,13 +131,34 @@ export class Repo {
     return Number.isInteger(value) && value >= 1 && value <= MAX_STARS ? value : 0;
   }
 
-  /** Rates a climb 1-5, or with 0 takes the rating away. */
+  /** Rates a climb 1-3, or with 0 takes the rating away. */
   async setRating(id, stars) {
     const clean = Math.max(0, Math.min(MAX_STARS, Math.round(Number(stars) || 0)));
     if (clean === 0) await this.store.remove('meta', `rating:${id}`);
     else await this.#put('meta', { k: `rating:${id}`, value: clean });
     this.#changed();
     return clean;
+  }
+
+  // ---- hearts (kept on this phone only) ----
+
+  /** Every climb you have given a heart: a Set of climb ids. */
+  async getLikes() {
+    const likes = new Set();
+    for (const { k, value } of await this.store.all('meta')) if (k.startsWith('like:') && value) likes.add(k.slice(5));
+    return likes;
+  }
+
+  async isLiked(id) {
+    return Boolean(await this.getMeta(`like:${id}`));
+  }
+
+  /** Gives a climb a heart, or with false takes it away. Returns whether it has one now. */
+  async setLike(id, liked = true) {
+    if (liked) await this.#put('meta', { k: `like:${id}`, value: 1 });
+    else await this.store.remove('meta', `like:${id}`);
+    this.#changed();
+    return Boolean(liked);
   }
 
   // ---- sent (completed) climbs, kept on this phone only ----
@@ -166,16 +190,25 @@ export class Repo {
   }
 
   /**
-   * Brings older data up to date. A climb's own `stars` becomes your rating of it and the field goes; a wall saved under a key
+   * Brings older data up to date. Ratings given when there were five stars become the same share of three (once: `ratingScale`);
+   * a climb's own `stars` becomes your rating of it and the field goes; a wall saved under a key
    * that has since been renamed (see RENAMED_WALLS) moves to the new key, with its climbs, its board and its place as the
    * wall you climb on. Safe to run every time the app starts. Returns how many records it touched.
    */
   async upgradeData() {
     let touched = await this.#moveRenamedWalls();
+    if ((await this.getMeta('ratingScale')) !== MAX_STARS) {
+      for (const { k, value } of await this.store.all('meta')) {
+        if (!k.startsWith('rating:') || !Number.isInteger(value)) continue;
+        await this.#put('meta', { k, value: fromFiveStars(value) });
+        touched++;
+      }
+      await this.setMetaQuietly('ratingScale', MAX_STARS);
+    }
     for (const climb of await this.store.all('climbs')) {
       if (!('stars' in climb)) continue;
       const { stars, ...rest } = climb;
-      if (stars > 0 && !climb.deletedAt && !(await this.getRating(climb.id))) await this.#put('meta', { k: `rating:${climb.id}`, value: Math.min(MAX_STARS, stars) });
+      if (stars > 0 && !climb.deletedAt && !(await this.getRating(climb.id))) await this.#put('meta', { k: `rating:${climb.id}`, value: fromFiveStars(stars) });
       await this.#put('climbs', rest);
       touched++;
     }

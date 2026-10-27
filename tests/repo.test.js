@@ -1,5 +1,5 @@
 import { assert, test } from './harness.js';
-import { MemoryStore, Repo } from '../site/src/data/repo.js';
+import { MemoryStore, Repo, fromFiveStars } from '../site/src/data/repo.js';
 import { parseShare } from '../site/src/domain/share.js';
 
 function setup() {
@@ -214,4 +214,35 @@ test('repo: a wall keeps its faces, and a wall saved without any has none', asyn
   assert.eq((await repo.getWall('long')).sections, sections);
   await repo.saveWall(wallData({ key: 'long', sections: [sections[0]] }));
   assert.eq((await repo.getWall('long')).sections, [sections[0]], 're-importing a pack replaces its faces');
+});
+
+test('hearts: kept on this phone only, one per climb, and not in files or in the climb', async () => {
+  const { repo } = setup();
+  await repo.saveWall(wallData());
+  const climb = await repo.saveClimb(climbData());
+  assert.eq([await repo.isLiked(climb.id), (await repo.getLikes()).size], [false, 0]);
+  let heard = 0;
+  repo.onChange(() => heard++);
+  assert.eq(await repo.setLike(climb.id, true), true);
+  assert.eq(heard, 1, 'the screens are told');
+  assert.eq([await repo.isLiked(climb.id), [...(await repo.getLikes())]], [true, [climb.id]]);
+  await repo.setLike(climb.id, true);
+  assert.eq((await repo.getLikes()).size, 1, 'a second heart changes nothing');
+  assert.ok(!JSON.stringify(await repo.exportWall('home')).includes('like'), 'a shared file does not carry hearts');
+  assert.ok(!('liked' in (await repo.getClimb(climb.id))), 'the climb itself does not change');
+  assert.eq(await repo.setLike(climb.id, false), false);
+  assert.eq((await repo.getLikes()).size, 0, 'it can be taken back');
+});
+
+test('ratings: ones given when there were five stars become the same share of three, once', async () => {
+  assert.eq([1, 2, 3, 4, 5].map(fromFiveStars), [1, 1, 2, 2, 3]);
+  const { repo } = setup();
+  for (const [id, value] of [['a', 1], ['b', 3], ['c', 5], ['d', 4]]) await repo.setMeta(`rating:${id}`, value);
+  await repo.upgradeData();
+  assert.eq([...(await repo.getRatings())].sort(), [['a', 1], ['b', 2], ['c', 3], ['d', 2]]);
+  assert.eq(await repo.getMeta('ratingScale'), 3);
+  await repo.setRating('e', 2);
+  await repo.upgradeData();
+  assert.eq(await repo.getRating('e'), 2, 'a rating given since is not changed again');
+  assert.eq(await repo.getRating('c'), 3);
 });

@@ -1,7 +1,7 @@
 import { parseMarks } from './holds.js';
 
 export const MAX_GRADE = 17;
-export const MAX_STARS = 5;
+export const MAX_STARS = 3;
 export const MAX_WALL_NAME = 40;
 export const MIN_USERNAME = 3;
 export const MAX_USERNAME = 20;
@@ -66,14 +66,20 @@ export const SENT_FILTERS = [
   ['todo', 'Not sent yet'],
 ];
 
-export const defaultQuery = () => ({ text: '', minGrade: 0, maxGrade: MAX_GRADE, minStars: 0, scope: 'all', sent: 'all', sort: 'newest' });
+// Whether you have given a climb a heart. Also yours alone, kept on your phone.
+export const LIKED_FILTERS = [
+  ['all', 'Any'],
+  ['liked', 'Hearted'],
+];
+
+export const defaultQuery = () => ({ text: '', minGrade: 0, maxGrade: MAX_GRADE, minStars: 0, scope: 'all', sent: 'all', liked: 'all', sort: 'newest' });
 export const gradeFiltered = (query) => query.minGrade > 0 || query.maxGrade < MAX_GRADE;
-export const filterCount = (query) => (gradeFiltered(query) ? 1 : 0) + (query.minStars > 0 ? 1 : 0) + (query.scope && query.scope !== 'all' ? 1 : 0) + (query.sent && query.sent !== 'all' ? 1 : 0);
+export const filterCount = (query) => (gradeFiltered(query) ? 1 : 0) + (query.minStars > 0 ? 1 : 0) + (query.scope && query.scope !== 'all' ? 1 : 0) + (query.sent && query.sent !== 'all' ? 1 : 0) + (query.liked && query.liked !== 'all' ? 1 : 0);
 
 // A climb is { id, wallKey, name, grade (0-17 or null), comment, author, holds (text), createdAt, updatedAt } and, once it is
 // on a shared board, publishedAt. Your star rating and whether you have sent it are not part of a climb: each phone keeps its
-// own (see Repo.getRatings and Repo.getSent), and the list and the viewer put them on the climbs they show as `stars` (0-5)
-// and `sent` (when you sent it, or 0).
+// own (see Repo.getRatings, Repo.getSent and Repo.getLikes), and the list and the viewer put them on the climbs they show as `stars`
+// (0-3), `sent` (when you sent it, or 0) and `liked` (whether you gave it a heart).
 
 export const marksOf = (climb) => parseMarks(climb.holds);
 
@@ -89,7 +95,8 @@ export function applyQuery(climbs, query, me = '') {
       !gradeFiltered(query) || (climb.grade !== null && climb.grade >= query.minGrade && climb.grade <= query.maxGrade);
     const matchesScope = !query.scope || query.scope === 'all' || (isMine(climb, me) && (query.scope === 'mine' || !isUploaded(climb)));
     const matchesSent = !query.sent || query.sent === 'all' || (query.sent === 'sent') === Boolean(climb.sent);
-    return matchesText && matchesGrade && matchesScope && matchesSent && (climb.stars || 0) >= query.minStars;
+    const matchesLiked = !query.liked || query.liked === 'all' || Boolean(climb.liked);
+    return matchesText && matchesGrade && matchesScope && matchesSent && matchesLiked && (climb.stars || 0) >= query.minStars;
   });
   const newestFirst = (a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
   const by = {

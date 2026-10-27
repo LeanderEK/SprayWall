@@ -6,7 +6,7 @@
 Two brand-new "phones" (separate invisible Chrome profiles) open the app:
   1. one makes an account: the AV wall is downloaded and imported, and the AV board (the code in site/src/defaults.js) is joined,
      so the shared climbs are there without another tap;
-  2. one taps Later: the AV wall is there, with no board; then it makes an account from code and the board is joined by itself.
+  2. one taps Start offline: the AV wall is there, with no board; then it makes an account from code and the board is joined by itself.
 The board is only READ (joining reads its climbs); nothing is written to it. The test accounts are deleted at the end.
 """
 import json
@@ -114,7 +114,7 @@ def main():
         check(new_phone.eval("document.querySelectorAll('.row').length") == expected, "and they are in the list")
         check(js(new_phone, "return (await app.repo.activeWall()).key;") == "av-wall", "the AV wall is the wall being climbed on")
 
-        print("A brand-new phone that taps Later")
+        print("A brand-new phone that taps Start offline")
         late_phone.go(base)
         late_phone.skip_account()
         check(js(late_phone, wall_bits) == '["AV wall",525]', "the AV wall is there without an account")

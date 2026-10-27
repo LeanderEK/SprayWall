@@ -17,6 +17,7 @@ import { openSyncSheet } from '../site/src/ui/syncsheet.js';
 import { mountViewer } from '../site/src/ui/viewer.js';
 import { mountWalls } from '../site/src/ui/walls.js';
 import { HoldPaths, PAINT, WallView, outlinePad } from '../site/src/ui/wallview.js';
+import { h, keyboard, openSheet, promptDialog } from '../site/src/ui/dom.js';
 
 // These tests put the real screens on the page and use them the way a person would: tapping, typing, swiping, pinching.
 // (Pages that are not being looked at do not get their animation frames, so nothing here waits for one.)
@@ -217,6 +218,7 @@ test('editor: choose a type, tap holds, undo, erase, save: the climb is stored w
   const press = (n) => tap(view.canvas, ...screenPoint(view, holds[n - 1]));
   assert.ok(buttonWith(root, 'Save').disabled, 'cannot save an empty climb');
   press(1); // Start is the type to begin with
+  assert.ok(buttonWith(root, 'Save').disabled && root.querySelector('.brush-hint').textContent.includes('Finish hold'), 'a Finish hold is still needed');
   click(buttonWith(root, 'Hand'));
   press(2);
   press(3);
@@ -228,7 +230,10 @@ test('editor: choose a type, tap holds, undo, erase, save: the climb is stored w
   press(2); // erase hold 2
   click(buttonWith(root, 'Foot'));
   press(9);
-  assert.ok(!buttonWith(root, 'Save').disabled);
+  assert.ok(buttonWith(root, 'Save').disabled, 'still no Finish hold: it cannot be saved yet');
+  click(buttonWith(root, 'Finish'));
+  press(7);
+  assert.ok(!buttonWith(root, 'Save').disabled, 'with a start and a finish it can be saved');
   click(buttonWith(root, 'Save'));
   const sheet = document.querySelector('.sheet');
   assert.ok(sheet, 'the save sheet opens');
@@ -241,7 +246,7 @@ test('editor: choose a type, tap holds, undo, erase, save: the climb is stored w
   click(sheet.querySelector('button.primary'));
   await wait(200);
   const [saved] = await repo.listClimbs('test-wall');
-  assert.eq(saved.holds, '1:start,3:hand,9:foot');
+  assert.eq(saved.holds, '1:start,3:hand,7:finish,9:foot');
   assert.eq([saved.name, saved.grade, saved.comment, 'stars' in saved, saved.author, saved.publishedAt], ['Corner crimp', 6, 'Stay low', false, 'tester', undefined]);
   assert.eq(visits.at(-1), ['replace', `/climb/${saved.id}`]);
   assert.ok(!document.querySelector('.sheet'), 'the sheet closes');
@@ -267,11 +272,11 @@ test('editor: the eye button hides and shows the outlines; Clear all empties the
 test('editor: changing an existing climb keeps it one climb and keeps its setter', async () => {
   const { repo, root, visits } = await freshApp();
   await repo.setMeta('author', 'leander');
-  const made = await repo.saveClimb(climbData());
+  const made = await repo.saveClimb(climbData({ holds: '1:start,5:hand,9:finish' }));
   await mountEditor(root, { id: made.id });
   const view = root.querySelector('.wallview').wallView;
   view.renderNow();
-  assert.eq(Object.keys(view.marks).length, 2);
+  assert.eq(Object.keys(view.marks).length, 3);
   click(buttonWith(root, 'Hand'));
   tap(view.canvas, ...screenPoint(view, view.wall.holds[7]));
   click(buttonWith(root, 'Save'));
@@ -281,7 +286,7 @@ test('editor: changing an existing climb keeps it one climb and keeps its setter
   await wait(200);
   const all = await repo.listClimbs('test-wall');
   assert.eq(all.length, 1);
-  assert.eq(all[0].holds, '1:start,5:hand,8:hand');
+  assert.eq(all[0].holds, '1:start,5:hand,8:hand,9:finish');
   assert.eq(all[0].author, 'leander');
   assert.eq(visits.at(-1), ['back', `/climb/${made.id}`]);
 });
@@ -385,11 +390,12 @@ test('viewer: the name and grade are in a small strip above the wall, and the in
   assert.ok(sheet.querySelector('.detail-by').textContent.includes('by zeke') && sheet.querySelector('.detail-by .tag').textContent === 'Draft');
   assert.eq(sheet.querySelector('.detail-comment').textContent, 'Directional holds.\nSomewhat powerful.');
   assert.eq(sheet.querySelectorAll('.star-on').length, 0, 'you have not rated it yet');
-  click(sheet.querySelectorAll('.star-btn')[3]); // four stars
+  assert.eq(sheet.querySelectorAll('.star-btn').length, 3, 'there are three stars to give');
+  click(sheet.querySelectorAll('.star-btn')[2]); // three stars
   await wait(100);
-  assert.eq(await repo.getRating(made.id), 4, 'the rating is saved on this phone');
-  assert.eq(sheet.querySelectorAll('.star-on').length, 4);
-  click(sheet.querySelectorAll('.star-btn')[3]); // the same star again takes the rating away
+  assert.eq(await repo.getRating(made.id), 3, 'the rating is saved on this phone');
+  assert.eq(sheet.querySelectorAll('.star-on').length, 3);
+  click(sheet.querySelectorAll('.star-btn')[2]); // the same star again takes the rating away
   await wait(100);
   assert.eq(await repo.getRating(made.id), 0);
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
@@ -736,7 +742,7 @@ test('account: the dialog creates an account, explains problems in plain words, 
   const waiting = askForAccount({ sync: app.sync });
   const dialog = document.querySelector('.dialog');
   assert.ok(dialog.textContent.includes('Create your account') && dialog.textContent.includes('no way to reset'), 'it says there is no reset');
-  assert.ok(!buttonWith(dialog, 'Later'), 'a new user cannot skip it');
+  assert.ok(!buttonWith(dialog, 'Start offline') && !buttonWith(dialog, 'Cancel'), 'with no way out offered there is none');
   const problem = () => dialog.querySelector('[role=alert]').textContent;
   click(buttonWith(dialog, 'Create account'));
   assert.ok(problem().includes('3 to 20'), problem());
@@ -775,7 +781,7 @@ test('account: the dialog creates an account, explains problems in plain words, 
   app.sync = null;
 });
 
-test('account: a new account takes the climbs made on this phone before it; "Later" leaves things as they were', async () => {
+test('account: a new account takes the climbs made on this phone before it; "Start offline" leaves things as they were', async () => {
   const { repo } = await freshApp();
   appWithoutAccount(repo);
   const draft = await repo.saveClimb(climbData({ name: 'Made as tester' }));
@@ -790,9 +796,18 @@ test('account: a new account takes the climbs made on this phone before it; "Lat
   assert.eq((await repo.getClimb(draft.id)).author, 'new-name', 'the draft became the new username\'s');
   app.sync = null;
 
-  const later = askForAccount({ sync: appWithoutAccount(repo) && app.sync, canSkip: true });
-  click(buttonWith(document.querySelector('.dialog'), 'Later'));
-  assert.eq(await later, null);
+  const offline = askForAccount({ sync: appWithoutAccount(repo) && app.sync, canSkip: true });
+  const first = document.querySelector('.dialog.account');
+  assert.ok(first.textContent.includes('you can only make your own'), 'the dialog says what starting offline means');
+  assert.ok(!buttonWith(first, 'Later'), 'there is no vague Later button any more');
+  click(buttonWith(first, 'Start offline'));
+  const question = document.querySelector('.dialog[role=alertdialog]');
+  assert.ok(question && question.textContent.includes('Start offline?') && question.textContent.includes('you can only make your own'), 'it asks again, saying the same');
+  click(buttonWith(question, 'Go back'));
+  assert.ok(!document.querySelector('.dialog[role=alertdialog]') && document.querySelector('.dialog.account'), 'Go back returns to the account dialog');
+  click(buttonWith(document.querySelector('.dialog.account'), 'Start offline'));
+  click(buttonWith(document.querySelector('.dialog[role=alertdialog]'), 'Start offline'));
+  assert.eq(await offline, null);
   assert.ok(!document.querySelector('.dialog'));
   app.sync = null;
 });
@@ -816,8 +831,8 @@ test('share sheet: signed in it shows who you are and can sign out; signed out i
   click(buttonWith(topSheet(), 'Sign in or create account'));
   await wait(100);
   const dialog = document.querySelector('.dialog');
-  assert.ok(dialog && dialog.textContent.includes('Create your account') && buttonWith(dialog, 'Later'));
-  click(buttonWith(dialog, 'Later'));
+  assert.ok(dialog && dialog.textContent.includes('Create your account') && buttonWith(dialog, 'Cancel') && !buttonWith(dialog, 'Start offline'), 'from here it is a plain Cancel');
+  click(buttonWith(dialog, 'Cancel'));
   await wait(50);
   app.sync = null;
 });
@@ -831,7 +846,7 @@ test('viewer: uploading while signed out asks you to sign in first', async () =>
   await wait(150);
   const dialog = document.querySelector('.dialog');
   assert.ok(dialog && dialog.querySelector('h2').textContent === 'Sign in', 'it asks to sign in');
-  click(buttonWith(dialog, 'Later'));
+  click(buttonWith(dialog, 'Cancel'));
   await wait(100);
   assert.ok(!(await repo.getClimb(draft.id)).publishedAt, 'nothing was uploaded');
   screen.destroy();
@@ -869,7 +884,7 @@ test('sent: the button marks a climb as sent and shows it, in the viewer and the
   click(buttonWith(sheet, 'Not sent yet'));
   assert.eq(names(), ['Not yet']);
   assert.ok([...root.querySelectorAll('button.chip')].some((b) => b.textContent.includes('Not sent yet')), 'the filter button says what is on');
-  click([...sheet.querySelectorAll('button')].filter((b) => b.textContent === 'Any').at(-1)); // the last "Any" is the one for sent
+  click([...sheet.querySelectorAll('button')].filter((b) => b.textContent === 'Any').at(-2)); // the one before the last "Any" is the one for sent (the last is for hearts)
   assert.eq(names().length, 2);
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
   list.destroy();
@@ -1187,4 +1202,186 @@ test('an ordinary wall on the Walls screen keeps its row exactly as before (no l
   assert.ok(row && !row.classList.contains('long') && !row.querySelector('.wall-controls'));
   assert.eq(row.querySelector('canvas.thumb').style.height, '72px');
   walls.destroy();
+});
+
+// ---- a start and a finish, the keyboard, ticks, hearts, offline ----
+
+test('editor: a climb needs a Start hold and a Finish hold, and the hint says which is missing', async () => {
+  const { root } = await freshApp();
+  const screen = await mountEditor(root, { id: 'new' });
+  const view = root.querySelector('.wallview').wallView;
+  view.renderNow();
+  const holds = view.wall.holds;
+  const hint = () => root.querySelector('.brush-hint').textContent;
+  tap(view.canvas, ...screenPoint(view, holds[0])); // a Start hold
+  assert.ok(hint().includes('a Finish hold') && !hint().includes('a Start hold'), hint());
+  click(buttonWith(root, 'Finish'));
+  tap(view.canvas, ...screenPoint(view, holds[4]));
+  assert.ok(!buttonWith(root, 'Save').disabled, 'start and finish: it can be saved');
+  click(buttonWith(root, 'Erase'));
+  tap(view.canvas, ...screenPoint(view, holds[0])); // the Start hold goes
+  assert.ok(buttonWith(root, 'Save').disabled && hint().includes('a Start hold'), hint());
+  click(buttonWith(root, 'Hand'));
+  tap(view.canvas, ...screenPoint(view, holds[1]));
+  assert.ok(buttonWith(root, 'Save').disabled, 'holds of other types do not make up for it');
+  screen.destroy();
+});
+
+/** A pretend visual viewport, which is the part of the screen the keyboard leaves free. */
+class PretendViewport extends EventTarget {
+  constructor(height) {
+    super();
+    this.height = height;
+    this.offsetTop = 0;
+  }
+
+  move(height, offsetTop = 0) {
+    this.height = height;
+    this.offsetTop = offsetTop;
+    this.dispatchEvent(new Event('resize'));
+  }
+}
+
+test('keyboard: a sheet and a dialog move up out of the keyboard\'s way, and go back when it closes', async () => {
+  const page = window.innerHeight;
+  const viewport = new PretendViewport(page);
+  const normal = keyboard.viewport;
+  keyboard.viewport = () => viewport;
+  try {
+    const sheet = openSheet('Typing', h('div', {}, h('input', { class: 'field', type: 'text', 'aria-label': 'Name' })));
+    assert.eq(sheet.panel.style.bottom, '', 'no keyboard: it sits at the bottom as always');
+    viewport.move(page - 320); // the keyboard opens
+    await wait(300); // (the sheet slides up when it opens)
+    assert.eq(sheet.panel.style.bottom, '320px', 'it sits on top of the keyboard');
+    assert.ok(sheet.panel.getBoundingClientRect().bottom <= page - 320 + 1, 'so none of it is behind the keyboard');
+    assert.ok(parseFloat(sheet.panel.style.maxHeight) <= page - 320, 'and it is never taller than what is left');
+    viewport.move(page);
+    assert.eq([sheet.panel.style.bottom, sheet.panel.style.maxHeight], ['', ''], 'the keyboard closes: back to normal');
+    sheet.close();
+
+    const asked = promptDialog({ title: 'Name', label: 'Name', value: 'x' });
+    const dialog = document.querySelector('.dialog');
+    viewport.move(page - 320);
+    const middle = parseFloat(dialog.style.top);
+    assert.ok(Math.abs(middle - (page - 320) / 2) < 1, `a question is centred in what is left (${middle})`);
+    click(buttonWith(dialog, 'Cancel'));
+    assert.eq(await asked, null);
+    viewport.move(page);
+    assert.ok(!document.querySelector('.dialog'));
+  } finally {
+    keyboard.viewport = normal;
+  }
+});
+
+test('keyboard: while the save sheet is open and the keyboard is up, the name and notes are on screen', async () => {
+  const { root } = await freshApp();
+  const screen = await mountEditor(root, { id: 'new' });
+  const view = root.querySelector('.wallview').wallView;
+  view.renderNow();
+  const holds = view.wall.holds;
+  tap(view.canvas, ...screenPoint(view, holds[0]));
+  click(buttonWith(root, 'Finish'));
+  tap(view.canvas, ...screenPoint(view, holds[4]));
+  const page = window.innerHeight;
+  const viewport = new PretendViewport(page);
+  const normal = keyboard.viewport;
+  keyboard.viewport = () => viewport;
+  try {
+    click(buttonWith(root, 'Save'));
+    const sheet = document.querySelector('.sheet');
+    viewport.move(page - 340); // the keyboard opens for the name
+    await wait(300); // (the sheet slides up when it opens)
+    const free = page - 340;
+    assert.ok(sheet.getBoundingClientRect().bottom <= free + 1 && sheet.getBoundingClientRect().top >= -1, 'the sheet is inside the free part of the screen');
+    for (const field of [sheet.querySelector('input[type=text]'), sheet.querySelector('textarea')]) {
+      field.focus();
+      field.scrollIntoView({ block: 'center' });
+      const box = field.getBoundingClientRect();
+      assert.ok(box.top >= 0 && box.bottom <= free + 1, `${field.tagName} is not behind the keyboard (${Math.round(box.top)}-${Math.round(box.bottom)} of ${free})`);
+    }
+  } finally {
+    keyboard.viewport = normal;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    screen.destroy();
+  }
+});
+
+test('ticks: the grade slider has a tick for every grade, with numbers under some, lined up with its thumb', async () => {
+  const { root } = await freshApp();
+  const screen = await mountEditor(root, { id: 'new' });
+  const view = root.querySelector('.wallview').wallView;
+  view.renderNow();
+  tap(view.canvas, ...screenPoint(view, view.wall.holds[0]));
+  click(buttonWith(root, 'Finish'));
+  tap(view.canvas, ...screenPoint(view, view.wall.holds[4]));
+  click(buttonWith(root, 'Save'));
+  const sheet = document.querySelector('.sheet');
+  const ticks = [...sheet.querySelectorAll('.slider-ticks .tick')];
+  assert.eq(ticks.length, 19, 'no grade, then V0 to V17');
+  assert.eq([...sheet.querySelectorAll('.tick-label')].map((el) => el.textContent), ['None', 'V5', 'V10', 'V15', 'V17']);
+  const slider = sheet.querySelector('.slider input[type=range]').getBoundingClientRect();
+  const centre = (el) => el.getBoundingClientRect().left;
+  assert.near(centre(ticks[0]), slider.left + 13, 1.5, 'the first tick is under the thumb at its far left');
+  assert.near(centre(ticks.at(-1)), slider.right - 13, 1.5, 'the last under the thumb at its far right');
+  assert.ok(ticks.every((tick, i) => i === 0 || centre(tick) > centre(ticks[i - 1])), 'in order, evenly');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  screen.destroy();
+});
+
+test('ticks: both grade sliders in the filters have them too, and there are three stars to filter on', async () => {
+  const { repo, root } = await freshApp();
+  await repo.saveClimb(climbData());
+  const screen = await mountList(root);
+  click([...root.querySelectorAll('button.chip')].find((b) => b.textContent.includes('Filters')));
+  const sheet = document.querySelector('.sheet');
+  assert.eq(sheet.querySelectorAll('.slider').length, 2);
+  assert.eq([...sheet.querySelectorAll('.slider')[0].querySelectorAll('.tick')].length, 18, 'V0 to V17');
+  assert.eq([...sheet.querySelectorAll('.slider')[1].querySelectorAll('.tick-label')].map((el) => el.textContent), ['V0', 'V5', 'V10', 'V15', 'V17']);
+  assert.eq([...sheet.querySelectorAll('.chip')].filter((chip) => /★\+$/.test(chip.textContent)).map((chip) => chip.textContent), ['1★+', '2★+', '3★+']);
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  screen.destroy();
+});
+
+test('hearts: a heart on a climb is yours alone, shows in the list, and the Hearted filter finds the climbs that have one', async () => {
+  const { repo, root } = await freshApp();
+  const loved = await repo.saveClimb(climbData({ name: 'Loved' }));
+  await repo.saveClimb(climbData({ name: 'Plain' }));
+  const screen = await mountViewer(root, { id: loved.id });
+  const heart = () => root.querySelector('.caption .heart-btn');
+  assert.eq([heart().getAttribute('aria-pressed'), heart().classList.contains('on')], ['false', false]);
+  click(heart());
+  await wait(100);
+  assert.eq([heart().getAttribute('aria-pressed'), heart().classList.contains('on')], ['true', true]);
+  assert.ok(await repo.isLiked(loved.id), 'it is saved on this phone');
+  screen.destroy();
+  root.replaceChildren();
+
+  const list = await mountList(root);
+  const rowFor = (name) => [...root.querySelectorAll('.row')].find((row) => row.querySelector('.row-name').textContent === name);
+  const names = () => [...root.querySelectorAll('.row .row-name')].map((el) => el.textContent).sort();
+  assert.ok(rowFor('Loved').querySelector('.badge.heart') && !rowFor('Plain').querySelector('.badge.heart'));
+  click([...root.querySelectorAll('button.chip')].find((b) => b.textContent.includes('Filters')));
+  const sheet = document.querySelector('.sheet');
+  click(buttonWith(sheet, 'Hearted'));
+  assert.eq(names(), ['Loved']);
+  assert.ok([...root.querySelectorAll('button.chip')].some((b) => b.textContent.includes('Hearted')), 'the filter button says what is on');
+  click(buttonWith(sheet, 'Reset'));
+  assert.eq(names(), ['Loved', 'Plain']);
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  list.destroy();
+  root.replaceChildren();
+
+  const again = await mountViewer(root, { id: loved.id });
+  click(root.querySelector('.caption .heart-btn')); // a second press takes it back
+  await wait(100);
+  assert.ok(!(await repo.isLiked(loved.id)));
+  again.destroy();
+});
+
+test('share sheet: it says what a SprayWall link is', async () => {
+  await freshApp();
+  await openSharingSheet();
+  const note = [...topSheet().querySelectorAll('.note')].find((el) => el.textContent.includes('SprayWall link'));
+  assert.ok(note && note.textContent.includes('Share a link') && note.textContent.includes('adds that climb'), 'it explains where a link comes from and what it does');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 });

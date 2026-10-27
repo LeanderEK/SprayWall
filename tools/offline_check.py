@@ -140,14 +140,11 @@ def part_two():
         (work / "site" / "styles.css").write_text((work / "site" / "styles.css").read_text(encoding="utf-8") + "\n/* a change */\n", encoding="utf-8")
         subprocess.run([sys.executable, str(stamp), str(work / "site")], check=True, capture_output=True)
         browser.go(f"{base}/site/?nosync=1")
-        toast = browser.wait_for("document.querySelector('.toast') ? document.querySelector('.toast').textContent : ''", seconds=25, what="the update message")
-        check("new version" in toast.lower(), f"the app offers the update: \"{toast}\"")
-        still_old = browser.eval("(async () => (await caches.keys()).join(','))()")
-        check(first in still_old and still_old.count("spraywall-") == 2, "the new version waits; the old one is still in use until you tap Update")
-        browser.eval("document.querySelector('.toast-action').click()")
-        browser.wait_for("(async () => { const k = await caches.keys(); return k.length === 1 && k[0] !== '%s'; })()" % first, seconds=25, what="the update to take over")
+        # Nobody taps anything: the new version installs itself as soon as nothing is half done on screen.
+        browser.wait_for("(async () => { const k = await caches.keys(); return k.length === 1 && k[0] !== '%s'; })()" % first, seconds=40, what="the new version to take over by itself")
         css = browser.wait_for("fetch('/site/styles.css').then((r) => r.text()).then((t) => t.includes('a change'))", what="the new styles")
-        check(css, "after tapping Update the app is running the new version, and the old copy is gone")
+        check(css, "the new version took over by itself (no Update tap), and the old copy is gone")
+        check(browser.eval("!document.querySelector('.toast-action')"), "and there is no Update button to tap")
     finally:
         browser.close()
         server.stop()
