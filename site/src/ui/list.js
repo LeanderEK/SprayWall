@@ -18,8 +18,8 @@ export function appBar({ title, subtitle = null, back = null, actions = [] }) {
   );
 }
 
-// Ticks on the grade sliders: one for every grade, and a number under V0, V5, V10, V15 and the hardest.
-const gradeTicks = { stops: MAX_GRADE + 1, labelAt: (stop) => (stop % 5 === 0 || stop === MAX_GRADE ? `V${stop}` : '') };
+// Ticks on the grade sliders: one for every grade.
+const gradeTicks = { stops: MAX_GRADE + 1 };
 
 export function filterSummary(query) {
   const parts = [];
@@ -76,7 +76,7 @@ export async function mountList(root) {
       maxSlider.value = MAX_GRADE;
       refresh();
     };
-    openSheet('Filters', h('div', { class: 'sheet-body' }, h('div', { class: 'row-between' }, h('h3', {}, 'Grade'), gradeText), h('div', { class: 'range-pair' }, h('span', {}, 'Easiest'), tickedSlider(minSlider, gradeTicks), h('span', {}, 'Hardest'), tickedSlider(maxSlider, gradeTicks)), h('h3', {}, 'Your stars'), starChips, h('h3', {}, 'Show'), scopeChips, h('h3', {}, 'Sent (only you see this)'), sentChips, h('h3', {}, 'Hearts (only you see this)'), likedChips, h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'text-btn', onclick: reset }, 'Reset'))));
+    openSheet('Filters', h('div', { class: 'sheet-body' }, h('div', { class: 'row-between' }, h('h3', {}, 'Grade'), gradeText), h('div', { class: 'range-pair' }, h('span', {}, 'Easiest'), tickedSlider(minSlider, gradeTicks), h('span', {}, 'Hardest'), tickedSlider(maxSlider, gradeTicks)), h('h3', {}, 'Your stars'), starChips, h('h3', {}, 'Show'), scopeChips, h('h3', {}, 'Sent (only you see this)'), sentChips, h('h3', {}, 'Likes (only you see this)'), likedChips, h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'text-btn', onclick: reset }, 'Reset'))));
     refresh();
   }
 
@@ -113,7 +113,7 @@ export async function mountList(root) {
         'button',
         { type: 'button', class: 'row', onclick: () => nav.go(`/climb/${climb.id}`) },
         thumb,
-        h('div', { class: 'row-text' }, h('div', { class: 'row-name' }, climb.name), stars(climb.stars, { size: 16 }), climb.comment ? h('div', { class: 'row-comment' }, climb.comment) : null, climb.author || !isUploaded(climb) || climb.sent || climb.liked ? h('div', { class: 'row-author' }, climb.author ? `by ${climb.author}` : '', isMine(climb, me) && !isUploaded(climb) ? h('span', { class: 'badge muted' }, 'Draft') : null, climb.sent ? h('span', { class: 'badge ok' }, '✓ Sent') : null, climb.liked ? h('span', { class: 'badge heart', 'aria-label': 'Hearted' }, '♥') : null) : null),
+        h('div', { class: 'row-text' }, h('div', { class: 'row-name' }, climb.name), stars(climb.stars, { size: 16 }), climb.comment ? h('div', { class: 'row-comment' }, climb.comment) : null, climb.author || !isUploaded(climb) || climb.sent || climb.liked ? h('div', { class: 'row-author' }, climb.author ? `by ${climb.author}` : '', isMine(climb, me) && !isUploaded(climb) ? h('span', { class: 'badge muted' }, 'Draft') : null, climb.sent ? h('span', { class: 'badge ok' }, '✓ Sent') : null, climb.liked ? h('span', { class: 'badge like', 'aria-label': 'Liked' }, '♥') : null) : null),
         h('div', { class: 'row-grade' }, gradeLabel(climb.grade)),
       );
     });

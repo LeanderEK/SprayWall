@@ -216,7 +216,7 @@ test('repo: a wall keeps its faces, and a wall saved without any has none', asyn
   assert.eq((await repo.getWall('long')).sections, [sections[0]], 're-importing a pack replaces its faces');
 });
 
-test('hearts: kept on this phone only, one per climb, and not in files or in the climb', async () => {
+test('likes: kept on this phone only, one per climb, and not in files or in the climb', async () => {
   const { repo } = setup();
   await repo.saveWall(wallData());
   const climb = await repo.saveClimb(climbData());
@@ -227,8 +227,8 @@ test('hearts: kept on this phone only, one per climb, and not in files or in the
   assert.eq(heard, 1, 'the screens are told');
   assert.eq([await repo.isLiked(climb.id), [...(await repo.getLikes())]], [true, [climb.id]]);
   await repo.setLike(climb.id, true);
-  assert.eq((await repo.getLikes()).size, 1, 'a second heart changes nothing');
-  assert.ok(!JSON.stringify(await repo.exportWall('home')).includes('like'), 'a shared file does not carry hearts');
+  assert.eq((await repo.getLikes()).size, 1, 'a second like changes nothing');
+  assert.ok(!JSON.stringify(await repo.exportWall('home')).includes('like'), 'a shared file does not carry likes');
   assert.ok(!('liked' in (await repo.getClimb(climb.id))), 'the climb itself does not change');
   assert.eq(await repo.setLike(climb.id, false), false);
   assert.eq((await repo.getLikes()).size, 0, 'it can be taken back');

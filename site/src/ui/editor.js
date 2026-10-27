@@ -151,7 +151,7 @@ export async function mountEditor(root, { id }) {
       }
     }
     update();
-    const sheet = openSheet('Save climb', h('div', { class: 'sheet-body' }, h('label', { class: 'field-label' }, 'Name', nameInput), h('div', { class: 'row-between' }, h('h3', {}, 'Grade'), gradeText), tickedSlider(slider, { stops: MAX_GRADE + 2, labelAt: (stop) => ({ 0: 'None', 6: 'V5', 11: 'V10', 16: 'V15', [MAX_GRADE + 1]: `V${MAX_GRADE}` })[stop] || '' }), commentInput, h('p', { class: 'note' }, 'Saved on this phone as a draft. You can upload it from the climb when it is ready; after that it cannot be changed.'), saveBtn));
+    const sheet = openSheet('Save climb', h('div', { class: 'sheet-body' }, h('label', { class: 'field-label' }, 'Name', nameInput), h('div', { class: 'row-between' }, h('h3', {}, 'Grade'), gradeText), tickedSlider(slider, { stops: MAX_GRADE + 2 }), commentInput, h('p', { class: 'note' }, 'Saved on this phone as a draft. You can upload it from the climb when it is ready; after that it cannot be changed.'), saveBtn));
     nameInput.focus({ preventScroll: true });
   }
 

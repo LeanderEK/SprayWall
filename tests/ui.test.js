@@ -884,7 +884,7 @@ test('sent: the button marks a climb as sent and shows it, in the viewer and the
   click(buttonWith(sheet, 'Not sent yet'));
   assert.eq(names(), ['Not yet']);
   assert.ok([...root.querySelectorAll('button.chip')].some((b) => b.textContent.includes('Not sent yet')), 'the filter button says what is on');
-  click([...sheet.querySelectorAll('button')].filter((b) => b.textContent === 'Any').at(-2)); // the one before the last "Any" is the one for sent (the last is for hearts)
+  click([...sheet.querySelectorAll('button')].filter((b) => b.textContent === 'Any').at(-2)); // the one before the last "Any" is the one for sent (the last is for likes)
   assert.eq(names().length, 2);
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
   list.destroy();
@@ -1204,7 +1204,7 @@ test('an ordinary wall on the Walls screen keeps its row exactly as before (no l
   walls.destroy();
 });
 
-// ---- a start and a finish, the keyboard, ticks, hearts, offline ----
+// ---- a start and a finish, the keyboard, ticks, likes, offline ----
 
 test('editor: a climb needs a Start hold and a Finish hold, and the hint says which is missing', async () => {
   const { root } = await freshApp();
@@ -1306,7 +1306,7 @@ test('keyboard: while the save sheet is open and the keyboard is up, the name an
   }
 });
 
-test('ticks: the grade slider has a tick for every grade, with numbers under some, lined up with its thumb', async () => {
+test('ticks: the grade slider has a tick for every grade, with no numbers, lined up with its thumb', async () => {
   const { root } = await freshApp();
   const screen = await mountEditor(root, { id: 'new' });
   const view = root.querySelector('.wallview').wallView;
@@ -1318,7 +1318,7 @@ test('ticks: the grade slider has a tick for every grade, with numbers under som
   const sheet = document.querySelector('.sheet');
   const ticks = [...sheet.querySelectorAll('.slider-ticks .tick')];
   assert.eq(ticks.length, 19, 'no grade, then V0 to V17');
-  assert.eq([...sheet.querySelectorAll('.tick-label')].map((el) => el.textContent), ['None', 'V5', 'V10', 'V15', 'V17']);
+  assert.eq(sheet.querySelectorAll('.tick-label').length, 0, 'just ticks, no numbers');
   const slider = sheet.querySelector('.slider input[type=range]').getBoundingClientRect();
   const centre = (el) => el.getBoundingClientRect().left;
   assert.near(centre(ticks[0]), slider.left + 13, 1.5, 'the first tick is under the thumb at its far left');
@@ -1336,18 +1336,18 @@ test('ticks: both grade sliders in the filters have them too, and there are thre
   const sheet = document.querySelector('.sheet');
   assert.eq(sheet.querySelectorAll('.slider').length, 2);
   assert.eq([...sheet.querySelectorAll('.slider')[0].querySelectorAll('.tick')].length, 18, 'V0 to V17');
-  assert.eq([...sheet.querySelectorAll('.slider')[1].querySelectorAll('.tick-label')].map((el) => el.textContent), ['V0', 'V5', 'V10', 'V15', 'V17']);
+  assert.eq(sheet.querySelectorAll('.tick-label').length, 0, 'just ticks, no numbers');
   assert.eq([...sheet.querySelectorAll('.chip')].filter((chip) => /★\+$/.test(chip.textContent)).map((chip) => chip.textContent), ['1★+', '2★+', '3★+']);
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
   screen.destroy();
 });
 
-test('hearts: a heart on a climb is yours alone, shows in the list, and the Hearted filter finds the climbs that have one', async () => {
+test('likes: a like on a climb is yours alone, shows in the list, and the Liked filter finds the climbs that have one', async () => {
   const { repo, root } = await freshApp();
   const loved = await repo.saveClimb(climbData({ name: 'Loved' }));
   await repo.saveClimb(climbData({ name: 'Plain' }));
   const screen = await mountViewer(root, { id: loved.id });
-  const heart = () => root.querySelector('.caption .heart-btn');
+  const heart = () => root.querySelector('.caption .like-btn');
   assert.eq([heart().getAttribute('aria-pressed'), heart().classList.contains('on')], ['false', false]);
   click(heart());
   await wait(100);
@@ -1359,12 +1359,12 @@ test('hearts: a heart on a climb is yours alone, shows in the list, and the Hear
   const list = await mountList(root);
   const rowFor = (name) => [...root.querySelectorAll('.row')].find((row) => row.querySelector('.row-name').textContent === name);
   const names = () => [...root.querySelectorAll('.row .row-name')].map((el) => el.textContent).sort();
-  assert.ok(rowFor('Loved').querySelector('.badge.heart') && !rowFor('Plain').querySelector('.badge.heart'));
+  assert.ok(rowFor('Loved').querySelector('.badge.like') && !rowFor('Plain').querySelector('.badge.like'));
   click([...root.querySelectorAll('button.chip')].find((b) => b.textContent.includes('Filters')));
   const sheet = document.querySelector('.sheet');
-  click(buttonWith(sheet, 'Hearted'));
+  click(buttonWith(sheet, 'Liked'));
   assert.eq(names(), ['Loved']);
-  assert.ok([...root.querySelectorAll('button.chip')].some((b) => b.textContent.includes('Hearted')), 'the filter button says what is on');
+  assert.ok([...root.querySelectorAll('button.chip')].some((b) => b.textContent.includes('Liked')), 'the filter button says what is on');
   click(buttonWith(sheet, 'Reset'));
   assert.eq(names(), ['Loved', 'Plain']);
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
@@ -1372,7 +1372,7 @@ test('hearts: a heart on a climb is yours alone, shows in the list, and the Hear
   root.replaceChildren();
 
   const again = await mountViewer(root, { id: loved.id });
-  click(root.querySelector('.caption .heart-btn')); // a second press takes it back
+  click(root.querySelector('.caption .like-btn')); // a second press takes it back
   await wait(100);
   assert.ok(!(await repo.isLiked(loved.id)));
   again.destroy();

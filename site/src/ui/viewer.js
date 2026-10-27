@@ -57,12 +57,12 @@ export async function mountViewer(root, { id }) {
   const deleteButton = iconButton('trash', 'Delete climb', remove);
   const bar = h('header', { class: 'bar' }, iconButton('back', 'Back', () => nav.back('/')), h('div', { class: 'bar-title' }, count), h('div', { class: 'bar-actions' }, eye, iconButton('info', 'Climb info', showDetails), iconButton('share', 'Share this climb', share), editButton, deleteButton));
   // The name and grade sit in a small strip above the wall; the rest (your stars, who set it, the comment) is behind the info button.
-  const heartButton = h('button', { type: 'button', class: 'heart-btn', onclick: toggleHeart }, icon('heart'));
+  const likeButton = h('button', { type: 'button', class: 'like-btn', onclick: toggleLike }, icon('heart'));
   const nameEl = h('div', { class: 'caption-name' });
   const gradeEl = h('div', { class: 'caption-grade' });
   const sentButton = h('button', { type: 'button', class: 'pill-btn', onclick: toggleSent });
   const uploadSlot = h('div', { class: 'caption-upload' });
-  const caption = h('div', { class: 'caption' }, heartButton, nameEl, uploadSlot, gradeEl);
+  const caption = h('div', { class: 'caption' }, likeButton, nameEl, uploadSlot, gradeEl);
   root.append(bar, caption, ...(facebar ? [facebar.el] : []), pager);
 
   function setTrack(dx, animate) {
@@ -90,9 +90,9 @@ export async function mountViewer(root, { id }) {
     const uploaded = isUploaded(climb);
     editButton.hidden = uploaded;
     deleteButton.hidden = uploaded;
-    heartButton.classList.toggle('on', Boolean(climb.liked));
-    heartButton.setAttribute('aria-pressed', String(Boolean(climb.liked)));
-    heartButton.setAttribute('aria-label', climb.liked ? 'Remove your heart' : 'Give this climb a heart');
+    likeButton.classList.toggle('on', Boolean(climb.liked));
+    likeButton.setAttribute('aria-pressed', String(Boolean(climb.liked)));
+    likeButton.setAttribute('aria-label', climb.liked ? 'Remove your like' : 'Like this climb');
     sentButton.textContent = climb.sent ? '✓ Sent' : 'Mark sent';
     sentButton.classList.toggle('on', Boolean(climb.sent));
     sentButton.setAttribute('aria-pressed', String(Boolean(climb.sent)));
@@ -124,8 +124,8 @@ export async function mountViewer(root, { id }) {
     );
   }
 
-  /** Gives the climb on screen a heart, or takes it away. Only you see it: it stays on this phone. */
-  async function toggleHeart() {
+  /** Likes the climb on screen, or takes the like away. Only you see it: it stays on this phone. */
+  async function toggleLike() {
     const climb = current();
     climb.liked = await repo.setLike(climb.id, !climb.liked);
     showInfo();

@@ -474,9 +474,9 @@ test('wall photo: an ordinary wall keeps its size limit; a long wall may be long
   assert.ok(maxLongSide(1600, 1000) > maxLongSide(1500, 1000), 'a wall longer than 1.5 gets a bigger budget, and never a smaller one');
 });
 
-// ---- hearts, three stars, the keyboard and updates ----
+// ---- likes, three stars, the keyboard and updates ----
 
-test('stars: there are three, and the Hearted filter shows only the climbs you gave a heart', () => {
+test('stars: there are three, and the Liked filter shows only the climbs you like', () => {
   assert.eq(MAX_STARS, 3);
   const all = [{ ...climb('1', 'One', 2, 1), liked: true }, { ...climb('2', 'Two', 3, 2) }, { ...climb('3', 'Three', 4, 3), liked: true }];
   const names = (query) => applyQuery(all, { ...defaultQuery(), ...query }).map((c) => c.name).sort();

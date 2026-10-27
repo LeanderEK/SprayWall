@@ -75,12 +75,12 @@ you can also tap the **mountain icon** (Walls) and **Get the AV wall**.
     **face** takes you straight there, and the **arrows** next to the map go to the previous or next climb (a swipe moves you
     about on the wall instead, because you are zoomed in).
 * **Rate it:** in the ⓘ panel tap the stars, up to **3** (tap the same star again to take it away).
-* **Heart it:** tap the **heart** to the left of the climb's name. The list shows a ♥ on hearted climbs and the Filters have a
-  **Hearted** choice, so you can keep a short list of favourites.
+* **Like it:** tap the **heart** to the left of the climb's name. The list shows a ♥ on liked climbs and the Filters have a
+  **Liked** choice, so you can keep a short list of favourites.
 * **Mark it as sent** when you have climbed it: the **Mark sent** button above the climb turns green (**✓ Sent**).
   Tap again to undo. The list shows ✓ Sent and you can filter by it.
 
-Your ratings, hearts and sent marks are **private**: they stay on your phone and nobody else ever sees them.
+Your ratings, likes and sent marks are **private**: they stay on your phone and nobody else ever sees them.
 
 ### Set a climb
 
@@ -176,7 +176,7 @@ There are two ways, and you can use either or both.
   plus a name, grade (V0 to V17 or none), comment, author and dates. It points at holds by number, which is why hold numbers
   must never change once climbs exist.
 * A climb is a **draft** (only on your device; editable) or **uploaded** (on a board; final). Climbs from friends arrive as uploaded.
-* **Ratings** (1 to 3 stars), **hearts** and **sent marks** are stored separately from climbs, only on your device, so they can
+* **Ratings** (1 to 3 stars), **likes** and **sent marks** are stored separately from climbs, only on your device, so they can
   never be shared by accident: they are not in links, files or boards. (Ratings given when there were five stars were turned into
   the same share of three, once.)
 

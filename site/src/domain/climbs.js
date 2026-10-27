@@ -66,10 +66,10 @@ export const SENT_FILTERS = [
   ['todo', 'Not sent yet'],
 ];
 
-// Whether you have given a climb a heart. Also yours alone, kept on your phone.
+// Whether you have liked a climb. Also yours alone, kept on your phone.
 export const LIKED_FILTERS = [
   ['all', 'Any'],
-  ['liked', 'Hearted'],
+  ['liked', 'Liked'],
 ];
 
 export const defaultQuery = () => ({ text: '', minGrade: 0, maxGrade: MAX_GRADE, minStars: 0, scope: 'all', sent: 'all', liked: 'all', sort: 'newest' });
@@ -79,7 +79,7 @@ export const filterCount = (query) => (gradeFiltered(query) ? 1 : 0) + (query.mi
 // A climb is { id, wallKey, name, grade (0-17 or null), comment, author, holds (text), createdAt, updatedAt } and, once it is
 // on a shared board, publishedAt. Your star rating and whether you have sent it are not part of a climb: each phone keeps its
 // own (see Repo.getRatings, Repo.getSent and Repo.getLikes), and the list and the viewer put them on the climbs they show as `stars`
-// (0-3), `sent` (when you sent it, or 0) and `liked` (whether you gave it a heart).
+// (0-3), `sent` (when you sent it, or 0) and `liked` (whether you like it).
 
 export const marksOf = (climb) => parseMarks(climb.holds);
 

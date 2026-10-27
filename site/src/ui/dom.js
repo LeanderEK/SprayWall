@@ -161,14 +161,12 @@ export function followKeyboard(el, { centered = false } = {}) {
 }
 
 /**
- * A slider with a tick mark at every stop, and a number under some of them. `labelAt(stop)` gives the text under a stop ('' for none). The
- * slider's own thumb is drawn at a known size so that the ticks line up with it.
+ * A slider with a tick mark at every stop (no numbers). The slider's own thumb is drawn at a known size so that the ticks line up with it.
  */
-export function tickedSlider(input, { stops, labelAt = () => '' }) {
+export function tickedSlider(input, { stops }) {
   const ticks = h('div', { class: 'slider-ticks', 'aria-hidden': 'true' });
   for (let stop = 0; stop < stops; stop++) {
-    const label = labelAt(stop);
-    ticks.append(h('span', { class: label ? 'tick major' : 'tick', style: { left: `calc(var(--thumb) / 2 + (100% - var(--thumb)) * ${stops > 1 ? stop / (stops - 1) : 0})` } }, label ? h('span', { class: 'tick-label' }, label) : null));
+    ticks.append(h('span', { class: 'tick', style: { left: `calc(var(--thumb) / 2 + (100% - var(--thumb)) * ${stops > 1 ? stop / (stops - 1) : 0})` } }));
   }
   return h('div', { class: 'slider' }, input, ticks);
 }

@@ -140,9 +140,9 @@ export class Repo {
     return clean;
   }
 
-  // ---- hearts (kept on this phone only) ----
+  // ---- likes (kept on this phone only) ----
 
-  /** Every climb you have given a heart: a Set of climb ids. */
+  /** Every climb you have liked: a Set of climb ids. */
   async getLikes() {
     const likes = new Set();
     for (const { k, value } of await this.store.all('meta')) if (k.startsWith('like:') && value) likes.add(k.slice(5));
@@ -153,7 +153,7 @@ export class Repo {
     return Boolean(await this.getMeta(`like:${id}`));
   }
 
-  /** Gives a climb a heart, or with false takes it away. Returns whether it has one now. */
+  /** Likes a climb, or with false takes the like away. Returns whether it is liked now. */
   async setLike(id, liked = true) {
     if (liked) await this.#put('meta', { k: `like:${id}`, value: 1 });
     else await this.store.remove('meta', `like:${id}`);
