@@ -1,7 +1,7 @@
-import { USERNAME_HELP, cleanUsername, isUploaded, sameName } from '../domain/climbs.js';
+import { USERNAME_HELP, cleanUsername, isUploaded, sameName, usernameProblem } from '../domain/climbs.js';
 import { MEMORY } from '../defaults.js';
 import { boardFits } from '../domain/wallpack.js';
-import { MIN_PASSWORD, SyncError, cleanPassword, cleanRemote, makeBoardCode, parseBoardCode, stampValue, toRecord } from '../domain/sync.js';
+import { SyncError, cleanPassword, cleanRemote, makeBoardCode, parseBoardCode, passwordProblem, stampValue, toRecord } from '../domain/sync.js';
 
 // A wall's shared board. Everything works on the phone first; the board is only visited when there is a connection.
 //   - Fetching: climbs other people (or your other phones) have uploaded since the last visit are added here. Uploaded
@@ -100,9 +100,9 @@ export class SyncService {
 
   #credentials(name, password) {
     const username = cleanUsername(name);
-    if (username === null) throw new SyncError('username', USERNAME_HELP);
+    if (username === null) throw new SyncError('username', usernameProblem(name) ?? USERNAME_HELP);
     const secret = cleanPassword(password);
-    if (secret === null) throw new SyncError('password', `The password needs at least ${MIN_PASSWORD} characters.`);
+    if (secret === null) throw new SyncError('password', passwordProblem(password));
     return { username, secret };
   }
 

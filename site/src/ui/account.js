@@ -1,5 +1,5 @@
-import { MAX_USERNAME, USERNAME_HELP, cleanUsername } from '../domain/climbs.js';
-import { MIN_PASSWORD, SyncError } from '../domain/sync.js';
+import { cleanUsername, usernameProblem } from '../domain/climbs.js';
+import { SyncError, passwordProblem } from '../domain/sync.js';
 import { followKeyboard, h } from './dom.js';
 
 /**
@@ -16,21 +16,37 @@ export function askForAccount({ sync, suggest = '', canSkip = false, mode = 'cre
     const problem = h('div', { class: 'sync-status bad', role: 'alert' });
     const title = h('h2', {});
     const intro = h('p', {});
-    const username = h('input', { class: 'field', type: 'text', name: 'username', maxlength: MAX_USERNAME, 'aria-label': 'Username', placeholder: 'Username', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', value: suggest });
-    const password = h('input', { class: 'field', type: 'password', name: 'password', 'aria-label': 'Password', placeholder: 'Password', maxlength: 128 });
-    const again = h('input', { class: 'field', type: 'password', name: 'password-again', 'aria-label': 'Password again', placeholder: 'Password again', maxlength: 128, autocomplete: 'new-password' });
+    const rules = h(
+      'div',
+      { class: 'note rules' },
+      h('p', {}, h('strong', {}, 'Username: '), '3 to 20 letters, digits, dashes (-) or underscores (_), starting with a letter or a digit. Capitals become small letters. No spaces or other symbols.'),
+      h('p', {}, h('strong', {}, 'Password: '), 'at least 8 characters. Any characters are allowed.'),
+    );
+    // A box is marked (and the rest of the dialog says why) until the person types in it again.
+    const field = (props) => h('input', { class: 'field', oninput: (event) => event.target.removeAttribute('aria-invalid'), ...props });
+    const hint = h('div', { class: 'field-hint', 'aria-live': 'polite' });
+    // No length limit on the box itself, so a name that is too long is explained instead of being cut short without a word.
+    const username = field({ type: 'text', name: 'username', maxlength: 64, 'aria-label': 'Username', placeholder: 'Username', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', value: suggest, oninput: (event) => { event.target.removeAttribute('aria-invalid'); hint.textContent = usernameProblem(event.target.value, { typing: true }) ?? ''; } });
+    const password = field({ type: 'password', name: 'password', 'aria-label': 'Password', placeholder: 'Password', maxlength: 200 });
+    const again = field({ type: 'password', name: 'password-again', 'aria-label': 'Password again', placeholder: 'Password again', maxlength: 200, autocomplete: 'new-password' });
     const submit = h('button', { type: 'submit', class: 'btn primary wide' });
     const switcher = h('button', { type: 'button', class: 'text-btn', onclick: () => { creating = !creating; problem.textContent = ''; show(); } });
+    const fail = (text, box) => {
+      problem.textContent = text;
+      box.setAttribute('aria-invalid', 'true');
+      box.focus();
+    };
     const cancel = canSkip ? h('button', { type: 'button', class: 'text-btn', onclick: () => finish(null) }, 'Cancel') : null;
-    const form = h('form', { onsubmit: (event) => { event.preventDefault(); go(); } }, username, password, again, problem, h('div', { class: 'dialog-actions spread' }, switcher, cancel, submit));
+    const form = h('form', { onsubmit: (event) => { event.preventDefault(); go(); } }, username, hint, password, again, problem, h('div', { class: 'dialog-actions spread' }, switcher, cancel, submit));
     const backdrop = h('div', { class: 'backdrop' });
-    const dialog = h('div', { class: 'dialog account', role: 'dialog', 'aria-label': 'Your account' }, title, intro, form);
+    const dialog = h('div', { class: 'dialog account', role: 'dialog', 'aria-label': 'Your account' }, title, intro, rules, form);
 
     function show() {
       title.textContent = creating ? 'Create your account' : 'Sign in';
       intro.textContent = creating
-        ? 'Choose a username (it is unique, and shown on every climb you upload) and a password. Use them to sign in on any phone. There is no way to reset a lost password, so pick one you will remember.'
+        ? 'Your username is unique and shown on every climb you upload. The same username and password sign you in on any phone. There is no way to reset a lost password.'
         : 'Sign in with the username and password of your account.';
+      rules.hidden = !creating;
       again.hidden = !creating;
       password.autocomplete = creating ? 'new-password' : 'current-password';
       submit.textContent = creating ? 'Create account' : 'Sign in';
@@ -46,19 +62,12 @@ export function askForAccount({ sync, suggest = '', canSkip = false, mode = 'cre
 
     async function go() {
       if (busy) return;
+      const nameProblem = usernameProblem(username.value);
+      if (nameProblem) return fail(nameProblem, username);
+      const secretProblem = passwordProblem(password.value);
+      if (secretProblem) return fail(secretProblem, password);
+      if (creating && password.value !== again.value) return fail('The two passwords are not the same.', again);
       const name = cleanUsername(username.value);
-      if (name === null) {
-        problem.textContent = USERNAME_HELP;
-        return;
-      }
-      if (password.value.length < MIN_PASSWORD) {
-        problem.textContent = `The password needs at least ${MIN_PASSWORD} characters.`;
-        return;
-      }
-      if (creating && password.value !== again.value) {
-        problem.textContent = 'The two passwords are not the same.';
-        return;
-      }
       busy = true;
       submit.disabled = true;
       problem.textContent = '';

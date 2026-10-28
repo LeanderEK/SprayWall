@@ -118,7 +118,7 @@ export async function openSharingSheet() {
     { class: 'sheet-body' },
     online
       ? [
-          h('div', { class: 'row-between' }, h('div', {}, h('div', { class: 'detail-label' }, account ? 'Signed in as' : 'Not signed in'), account || name ? h('div', { class: 'username' }, account ? account.username : name) : null), account ? h('button', { type: 'button', class: 'text-btn', onclick: signOut }, 'Sign out') : h('button', { type: 'button', class: 'btn', onclick: signIn }, 'Sign in or create account')),
+          h('div', { class: 'row-between' }, h('div', {}, h('div', { class: 'detail-label' }, account ? 'Signed in as' : 'Not signed in'), account ? h('div', { class: 'username' }, account.username) : null), account ? h('button', { type: 'button', class: 'text-btn', onclick: signOut }, 'Sign out') : h('button', { type: 'button', class: 'btn', onclick: signIn }, 'Sign in or create account')),
           account ? h('p', { class: 'note' }, 'Your username is yours alone and is the same on every phone you sign in on.') : h('p', { class: 'note' }, 'You can see the shared climbs without an account. You need one to upload your own climbs or to start a board.'),
         ]
       : [

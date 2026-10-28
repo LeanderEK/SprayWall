@@ -3,9 +3,9 @@ import { FakeFirebase } from './fakefirebase.js';
 import { FirestoreRemote } from '../site/src/data/firestore.js';
 import { MemoryStore, Repo } from '../site/src/data/repo.js';
 import { SyncService } from '../site/src/data/sync.js';
-import { cleanUsername, isMine, isUploaded } from '../site/src/domain/climbs.js';
+import { cleanUsername, isMine, isUploaded, usernameProblem } from '../site/src/domain/climbs.js';
 import {
-  AUTH_DOMAIN, BOARD_ALPHABET, cleanPassword, cleanRemote, emailFor, fromFields, idFromName, makeBoardCode, parseBoardCode, showBoardCode, stampValue, toFields, toRecord,
+  AUTH_DOMAIN, BOARD_ALPHABET, cleanPassword, cleanRemote, emailFor, fromFields, idFromName, makeBoardCode, parseBoardCode, passwordProblem, showBoardCode, stampValue, toFields, toRecord,
 } from '../site/src/domain/sync.js';
 import { parseShare } from '../site/src/domain/share.js';
 import { boardFits, parseHoldsJson } from '../site/src/domain/wallpack.js';
@@ -60,6 +60,37 @@ test('username: 3 to 20 lowercase letters, digits, dashes or underscores; capita
   assert.ok(isMine({ author: 'zeke' }, ' Zeke '), 'capitals and spaces at the ends do not matter');
   assert.ok(isMine({ author: '' }, ''), 'a climb with no name on it was made on this phone, before there was a username');
   assert.ok(!isMine({ author: 'zeke' }, 'bea'), 'someone else\'s is not yours');
+});
+
+test('username: when one will not do, the words say exactly why, and they agree with what is accepted', () => {
+  const problem = (text) => usernameProblem(text);
+  assert.eq(problem('zeke b'), 'A username cannot contain a space. Use only letters, digits, dashes and underscores.');
+  assert.eq(problem('a@b.com'), 'A username cannot contain \u201c@\u201d or \u201c.\u201d. Use only letters, digits, dashes and underscores.');
+  assert.ok(problem('Åsa').includes('\u201c\u00c5\u201d'), problem('Åsa'));
+  assert.eq(problem('hi!!!'), 'A username cannot contain \u201c!\u201d. Use only letters, digits, dashes and underscores.', 'each odd character is named once');
+  assert.eq(problem('a b!c.d,e;f'), 'A username cannot contain a space, \u201c!\u201d, \u201c.\u201d, \u201c,\u201d or other symbols. Use only letters, digits, dashes and underscores.');
+  assert.ok(problem('x'.repeat(21)).includes('too long (21 characters)') && problem('x'.repeat(21)).includes('3 to 20'));
+  assert.ok(problem('ab').includes('too short') && problem('ab').includes('3 to 20'));
+  assert.eq(problem('-lead'), 'A username has to start with a letter or a digit, not a dash or an underscore.');
+  assert.ok(problem('').startsWith('Type a username'));
+  assert.eq(usernameProblem('ab', { typing: true }), null, 'while typing, too short can wait');
+  assert.eq(usernameProblem('', { typing: true }), null, 'and so can nothing yet');
+  assert.ok(usernameProblem('a b', { typing: true }), 'but a symbol is pointed out at once');
+  for (const text of ['Leander', '  Zeke  ', 'a-b_c', 'abc', 'x'.repeat(20), '', ' ', 'a', 'ab', 'x'.repeat(21), 'zeke b', 'Åsa', 'a.b', '-lead', '_lead', '<b>hi</b>', '🙂🙂🙂', 'semi;colon', 'a@b.com', null, undefined]) {
+    assert.eq(usernameProblem(text) === null, cleanUsername(text) !== null, `${String(text)}: a problem is given exactly when the name is refused`);
+  }
+});
+
+test('password: when one will not do, the words say how many characters it has and needs', () => {
+  assert.eq(passwordProblem('12345678'), null);
+  assert.eq(passwordProblem('  spaces kept  '), null);
+  assert.eq(passwordProblem('x'.repeat(128)), null);
+  assert.ok(passwordProblem('short').includes('you typed 5') && passwordProblem('short').includes('at least 8'), passwordProblem('short'));
+  assert.ok(passwordProblem('').includes('at least 8'));
+  assert.ok(passwordProblem('x'.repeat(129)).includes('too long'));
+  for (const text of ['', '1234567', '12345678', 'x'.repeat(128), 'x'.repeat(129), null, undefined, 12345678]) {
+    assert.eq(passwordProblem(text) === null, cleanPassword(text) !== null, `${String(text)}: a problem is given exactly when the password is refused`);
+  }
 });
 
 test('account: the username becomes an email-style name nobody can get mail at, and the password needs 8 characters', () => {

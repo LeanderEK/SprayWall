@@ -40,9 +40,10 @@ An account is needed for one thing: **uploading** a climb (or starting a board o
 asks you to create one: a **username** and a **password**. You can also make one any time from the share icon. Climbs you made
 before you had an account become yours, under the new username.
 
-* The username is **yours alone** (nobody else can have it), 3 to 20 letters, digits, dashes or underscores, always lowercase.
-  It is shown on every climb you upload.
-* The password needs at least 8 characters. **There is no way to reset a lost password**, so pick one you will remember
+* The username is **yours alone** (nobody else can have it), 3 to 20 letters, digits, dashes or underscores, starting with a letter
+  or a digit; capitals are turned into small letters. It is shown on every climb you upload. The dialog lists these rules, points out
+  a character that is not allowed as you type it, and says exactly what is wrong if you try anyway.
+* The password needs at least 8 characters (any characters are allowed). **There is no way to reset a lost password**, so pick one you will remember
   (a password manager helps). If you do lose it, ask the person who runs the project to delete your account; you can then
   make it again with the same username, and the climbs you uploaded count as yours again.
 * The same username and password sign you in on **any** phone: on the new phone choose **I already have an account**.

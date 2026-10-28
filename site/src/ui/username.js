@@ -1,4 +1,4 @@
-import { MAX_USERNAME, USERNAME_HELP, cleanUsername } from '../domain/climbs.js';
+import { MAX_USERNAME, USERNAME_HELP, cleanUsername, usernameProblem } from '../domain/climbs.js';
 import { h } from './dom.js';
 
 /**
@@ -23,7 +23,7 @@ export function askForUsername(save) {
     async function go() {
       const name = cleanUsername(input.value);
       if (name === null) {
-        problem.textContent = USERNAME_HELP;
+        problem.textContent = usernameProblem(input.value) ?? USERNAME_HELP;
         return;
       }
       button.disabled = true;

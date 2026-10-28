@@ -32,10 +32,20 @@ export class SyncError extends Error {
 
 export const AUTH_DOMAIN = 'spraywall.example.com';
 export const MIN_PASSWORD = 8;
+export const MAX_PASSWORD = 128;
 export const emailFor = (username) => `${username}@${AUTH_DOMAIN}`;
 
 /** The password as typed, or null if it is too short (Firebase needs 6; 8 is asked for). Passwords are never changed or trimmed. */
-export const cleanPassword = (text) => (typeof text === 'string' && text.length >= MIN_PASSWORD && text.length <= 128 ? text : null);
+export const cleanPassword = (text) => (typeof text === 'string' && text.length >= MIN_PASSWORD && text.length <= MAX_PASSWORD ? text : null);
+
+/** Why a typed password will not do, in words for the person typing it, or null if it is fine (so it is null exactly when `cleanPassword` accepts it). */
+export function passwordProblem(text) {
+  const typed = typeof text === 'string' ? text : '';
+  if (typed === '') return `Type a password (at least ${MIN_PASSWORD} characters).`;
+  if (typed.length < MIN_PASSWORD) return `That password is too short: you typed ${typed.length} and it needs at least ${MIN_PASSWORD} characters.`;
+  if (typed.length > MAX_PASSWORD) return `That password is too long: the most is ${MAX_PASSWORD} characters.`;
+  return null;
+}
 
 // ---- board codes ----
 

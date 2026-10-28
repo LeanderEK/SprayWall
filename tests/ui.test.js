@@ -766,12 +766,25 @@ test('account: the dialog creates an account, explains problems in plain words, 
   assert.ok(dialog.textContent.includes('Create your account') && dialog.textContent.includes('no way to reset'), 'it says there is no reset');
   assert.ok(!buttonWith(dialog, 'Cancel'), 'with no way out offered there is none');
   const problem = () => dialog.querySelector('[role=alert]').textContent;
+  assert.ok(dialog.textContent.includes('Username: 3 to 20 letters, digits, dashes') && dialog.textContent.includes('Password: at least 8 characters'), 'the rules are written in the dialog before anything is typed');
   click(buttonWith(dialog, 'Create account'));
   assert.ok(problem().includes('3 to 20'), problem());
+  assert.eq(dialog.querySelector('input[aria-label="Username"]').getAttribute('aria-invalid'), 'true', 'the box that is wrong is marked');
+  fill(dialog, 'Username', 'bad name!');
+  assert.ok(dialog.querySelector('.field-hint').textContent.includes('cannot contain a space or \u201c!\u201d'), 'typing an illegal character is pointed out at once: ' + dialog.querySelector('.field-hint').textContent);
+  assert.ok(!dialog.querySelector('input[aria-label="Username"]').hasAttribute('aria-invalid'), 'and typing clears the mark');
+  click(buttonWith(dialog, 'Create account'));
+  assert.ok(problem().includes('cannot contain a space or \u201c!\u201d'), problem());
+  fill(dialog, 'Username', 'ab');
+  assert.eq(dialog.querySelector('.field-hint').textContent, '', 'a name that is only short so far is not scolded while typing');
+  click(buttonWith(dialog, 'Create account'));
+  assert.ok(problem().includes('too short'), problem());
   fill(dialog, 'Username', 'Alex');
+  assert.eq(dialog.querySelector('.field-hint').textContent, '', 'capitals are fine');
   fill(dialog, 'Password', 'short');
   click(buttonWith(dialog, 'Create account'));
-  assert.ok(problem().includes('at least 8'), problem());
+  assert.ok(problem().includes('you typed 5') && problem().includes('at least 8'), problem());
+  assert.eq(dialog.querySelector('input[aria-label="Password"]').getAttribute('aria-invalid'), 'true');
   fill(dialog, 'Password', 'a-good-password');
   fill(dialog, 'Password again', 'a-different-one');
   click(buttonWith(dialog, 'Create account'));
@@ -785,6 +798,7 @@ test('account: the dialog creates an account, explains problems in plain words, 
 
   click(buttonWith(dialog, 'I already have an account'));
   assert.ok(dialog.querySelector('h2').textContent === 'Sign in' && dialog.querySelector('input[aria-label="Password again"]').hidden);
+  assert.ok(dialog.querySelector('.rules').hidden, 'the rules for a new account are not shown when signing in');
   fill(dialog, 'Password', 'wrong-password');
   click(buttonWith(dialog, 'Sign in'));
   await wait(200);
@@ -843,6 +857,7 @@ test('share sheet: signed in it shows who you are and can sign out; signed out i
   assert.eq(await repo.authorName(), 'tester', 'the name stays on the phone');
   await openSharingSheet();
   assert.ok(topSheet().textContent.includes('Not signed in'));
+  assert.ok(!topSheet().querySelector('.username') && !topSheet().textContent.includes('tester'), 'signed out, the old name is not shown as if it were still signed in');
   click(buttonWith(topSheet(), 'Sign in or create account'));
   await wait(100);
   const dialog = document.querySelector('.dialog');

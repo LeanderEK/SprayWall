@@ -32,7 +32,28 @@ export function cleanUsername(text) {
   return /^[a-z0-9][a-z0-9_-]{2,19}$/.test(clean) ? clean : null;
 }
 
-export const USERNAME_HELP = 'Use 3 to 20 letters, digits, dashes or underscores.';
+export const USERNAME_HELP = 'A username has 3 to 20 characters: letters, digits, dashes or underscores, starting with a letter or a digit.';
+
+const describeCharacter = (character) => (/\s/.test(character) ? 'a space' : `\u201c${character}\u201d`);
+
+/**
+ * Why a typed username will not do, in words for the person typing it, or null if it is fine (so it is null exactly when
+ * `cleanUsername` accepts it). With `typing` the person may not have finished, so "too short" and "nothing yet" wait.
+ */
+export function usernameProblem(text, { typing = false } = {}) {
+  const typed = String(text ?? '').trim();
+  if (typed === '') return typing ? null : 'Type a username: 3 to 20 letters, digits, dashes or underscores.';
+  const odd = [...new Set([...typed].filter((character) => !/^[A-Za-z0-9_-]$/.test(character)))];
+  if (odd.length > 0) {
+    const shown = odd.slice(0, 4).map(describeCharacter);
+    const list = odd.length > 4 ? `${shown.join(', ')} or other symbols` : shown.length > 1 ? `${shown.slice(0, -1).join(', ')} or ${shown.at(-1)}` : shown[0];
+    return `A username cannot contain ${list}. Use only letters, digits, dashes and underscores.`;
+  }
+  if (typed.length > MAX_USERNAME) return `That username is too long (${typed.length} characters). A username has ${MIN_USERNAME} to ${MAX_USERNAME} characters.`;
+  if (!/^[A-Za-z0-9]/.test(typed)) return 'A username has to start with a letter or a digit, not a dash or an underscore.';
+  if (typed.length < MIN_USERNAME) return typing ? null : `That username is too short. A username has ${MIN_USERNAME} to ${MAX_USERNAME} characters.`;
+  return null;
+}
 
 /** Two usernames are the same person's, whatever the capitals. */
 export const sameName = (a, b) => Boolean(a) && Boolean(b) && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();

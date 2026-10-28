@@ -1,4 +1,4 @@
-import { MAX_STARS, USERNAME_HELP, cleanUsername, cleanWallName, isMine, sameName } from '../domain/climbs.js';
+import { MAX_STARS, USERNAME_HELP, cleanUsername, cleanWallName, isMine, sameName, usernameProblem } from '../domain/climbs.js';
 import { makeShare } from '../domain/share.js';
 import { RENAMED_WALLS } from '../domain/wallpack.js';
 
@@ -94,7 +94,7 @@ export class Repo {
    */
   async setUsername(text, { force = false, renameDrafts = true } = {}) {
     const name = cleanUsername(text);
-    if (name === null) throw new Error(USERNAME_HELP);
+    if (name === null) throw new Error(usernameProblem(text) ?? USERNAME_HELP);
     const old = await this.authorName();
     if (!force && old && !sameName(old, name) && !(await this.canChangeUsername())) throw new Error('You have uploaded climbs under your current username, so it cannot be changed.');
     await this.#put('meta', { k: 'author', value: name });
