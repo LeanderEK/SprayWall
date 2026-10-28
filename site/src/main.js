@@ -10,7 +10,6 @@ import { mountImporter } from './ui/importer.js';
 import { mountList } from './ui/list.js';
 import { ensureDefaults, ensureIdentity, refreshDefaultWall } from './setup.js';
 import { whenQuiet } from './update.js';
-import { askForAccount } from './ui/account.js';
 import { askForUsername } from './ui/username.js';
 import { mountViewer } from './ui/viewer.js';
 import { mountWalls } from './ui/walls.js';
@@ -142,7 +141,7 @@ async function start() {
   askToKeepData();
   await app.repo.upgradeData();
   startSync();
-  await ensureIdentity({ repo: app.repo, sync: app.sync, askForAccount, askForUsername });
+  await ensureIdentity({ repo: app.repo, sync: app.sync, askForUsername });
   await setUpDefaults({ first: true });
   // Signing in (or out) later: a phone that skipped the account joins the board as soon as it has one.
   app.sync.onState((key) => key === null && setUpDefaults({ first: false }));

@@ -71,36 +71,26 @@ test('start-up: a signed-in account is used as it is, without asking anything', 
   const b = freshPhone(backend);
   await b.sync.signIn('alex', 'alex-password');
   const asked = [];
-  const outcome = await ensureIdentity({ repo: b.repo, sync: b.sync, askForAccount: async (options) => asked.push(options), askForUsername: async () => asked.push('name') });
+  const outcome = await ensureIdentity({ repo: b.repo, sync: b.sync, askForUsername: async () => asked.push('name') });
   assert.eq([outcome, await b.repo.authorName(), asked.length], ['account', 'alex', 0]);
 });
 
-test('start-up: a new user is offered the account dialog with a Later button, and Later is remembered', async () => {
+test('start-up: with a Firebase project nobody is asked for an account, and having none is fine', async () => {
   const backend = new FakeFirebase();
   const { repo, sync } = freshPhone(backend);
-  const asked = [];
-  const ask = (answer) => async (options) => {
-    asked.push({ canSkip: options.canSkip, suggest: options.suggest });
-    return answer;
-  };
-  assert.eq(await ensureIdentity({ repo, sync, askForAccount: ask(null), askForUsername: async () => assert.ok(false, 'no local name box when there are accounts') }), 'skipped');
-  assert.eq(asked, [{ canSkip: true, suggest: '' }], 'Later is on offer, even to a brand-new user');
-  assert.eq(await repo.getMeta('accountSkipped'), true);
-  assert.eq(await ensureIdentity({ repo, sync, askForAccount: ask(null), askForUsername: async () => {} }), 'skipped');
-  assert.eq(asked.length, 1, 'not asked again every time the app opens');
-
-  const another = freshPhone(backend);
-  assert.eq(await ensureIdentity({ repo: another.repo, sync: another.sync, askForAccount: ask('bob'), askForUsername: async () => {} }), 'account');
+  const outcome = await ensureIdentity({ repo, sync, askForUsername: async () => assert.ok(false, 'no name box when there are accounts') });
+  assert.eq(outcome, 'none');
+  assert.eq(await repo.authorName(), '', 'no name until there is an account');
+  assert.eq(await sync.account(), null);
 });
 
-test('start-up: a phone that already has a name suggests it, and keeps it when the account is skipped', async () => {
+test('start-up: a phone that already has a name keeps it while it has no account', async () => {
   const backend = new FakeFirebase();
   const { repo, sync } = freshPhone(backend);
   await repo.saveWall(WALL);
   await repo.setUsername('leander');
-  const asked = [];
-  await ensureIdentity({ repo, sync, askForAccount: async (options) => { asked.push(options.suggest); return null; }, askForUsername: async () => {} });
-  assert.eq([asked, await repo.authorName()], [['leander'], 'leander']);
+  assert.eq(await ensureIdentity({ repo, sync, askForUsername: async () => {} }), 'none');
+  assert.eq(await repo.authorName(), 'leander');
 });
 
 test('start-up: with no Firebase project a name is asked for once and that is all', async () => {
@@ -110,15 +100,15 @@ test('start-up: with no Firebase project a name is asked for once and that is al
     asks++;
     return save('typed-name');
   };
-  assert.eq(await ensureIdentity({ repo, sync, askForAccount: async () => assert.ok(false), askForUsername }), 'local');
+  assert.eq(await ensureIdentity({ repo, sync, askForUsername }), 'local');
   assert.eq([asks, await repo.authorName()], [1, 'typed-name']);
-  await ensureIdentity({ repo, sync, askForAccount: async () => assert.ok(false), askForUsername });
+  await ensureIdentity({ repo, sync, askForUsername });
   assert.eq(asks, 1);
 });
 
 // ---- the default wall and board ----
 
-test('defaults: a new phone gets the wall at once, and the board as soon as there is an account', async () => {
+test('defaults: a new phone gets the wall and the shared board at once, with no account', async () => {
   const backend = new FakeFirebase();
   const code = await boardWithOneClimb(backend);
   const { repo, sync } = freshPhone(backend);
@@ -126,26 +116,22 @@ test('defaults: a new phone gets the wall at once, and the board as soon as ther
   const steps = [];
   const progress = (text) => steps.push(text);
 
+  assert.eq(await sync.account(), null, 'nobody has an account');
   let result = await ensureDefaults({ repo, sync, config: config(code), fetchPack, importPack, progress });
-  assert.eq([result.wall, result.board, result.problem], ['imported', 'waiting', '']);
+  assert.eq([result.wall, result.board, result.problem], ['imported', 'joined', '']);
   assert.eq(log, ['download wall/av-wall.zip', 'import']);
-  assert.eq(steps, ['Downloading the AV wall…', 'Adding the AV wall…']);
+  assert.eq(steps, ['Downloading the AV wall…', 'Adding the AV wall…', 'Joining the AV board…']);
   assert.eq((await repo.activeWall()).key, 'av-wall');
-  assert.eq(await repo.getSyncSetup('av-wall'), undefined, 'no board without an account');
-
-  await sync.signUp('bea', 'bea-password'); // she makes an account later
-  result = await ensureDefaults({ repo, sync, config: config(code), fetchPack, importPack, progress });
-  assert.eq([result.wall, result.board], ['had', 'joined']);
-  assert.eq((await repo.getSyncSetup('av-wall')).code, parseBoardCode(code));
+  assert.eq((await repo.getSyncSetup('av-wall')).code, parseBoardCode(code), 'the board is joined with no account');
   assert.eq((await repo.listClimbs('av-wall')).map((c) => c.name), ['On the board'], 'the shared climbs arrived');
-  assert.eq(log.length, 2, 'the wall was not downloaded again');
-  assert.eq(steps.at(-1), 'Joining the AV board…');
 
-  result = await ensureDefaults({ repo, sync, config: config(code), fetchPack, importPack });
-  assert.eq([result.wall, result.board], ['had', 'had']);
+  await sync.signUp('bea', 'bea-password'); // she makes an account later, to upload
+  result = await ensureDefaults({ repo, sync, config: config(code), fetchPack, importPack, progress });
+  assert.eq([result.wall, result.board], ['had', 'had'], 'nothing is done twice');
+  assert.eq(log.length, 2, 'the wall was not downloaded again');
 });
 
-test('defaults: signing in with the account first, the wall and the board come in one go', async () => {
+test('defaults: with an account already, the wall and the board come in one go', async () => {
   const backend = new FakeFirebase();
   const code = await boardWithOneClimb(backend);
   const { repo, sync } = freshPhone(backend);

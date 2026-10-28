@@ -165,6 +165,31 @@ def main():
             refused = js(you, "await app.sync.remote.createClimb('%s', 'rules-test-%s-0001', { name: 'x', %s, createdAt: Date.now() });" % (code, label.split()[1], record))
             check("denied" in refused, f"the rules refuse {label}")
 
+        print("What a phone with NO account may do (the rules again, with no token at all)")
+        bare = """
+            const { projectId } = app.sync.remote.config;
+            const base = 'https://firestore.googleapis.com/v1/projects/' + projectId + '/databases/(default)/documents';
+            const status = async (method, url, body) => (await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body })).status;
+            const climb = (await app.repo.listClimbs('av-wall')).find((c) => c.name === 'Swoobap');
+            const query = { structuredQuery: { from: [{ collectionId: 'climbs' }], limit: 5 } };
+            const write = { update: { name: 'projects/' + projectId + '/databases/(default)/documents/boards/%s/climbs/no-account-0001', fields: { name: { stringValue: 'x' }, author: { stringValue: %r }, holds: { stringValue: '1:hand' }, createdAt: { integerValue: '1' } } }, updateTransforms: [{ fieldPath: 'serverTime', setToServerValue: 'REQUEST_TIME' }], currentDocument: { exists: false } };
+            const results = {
+              board: await status('GET', base + '/boards/%s'),
+              climbs: await status('POST', base + '/boards/%s:runQuery', JSON.stringify(query)),
+              oneClimb: await status('GET', base + '/boards/%s/climbs/' + climb.id),
+              list: await status('GET', base + '/boards'),
+              newClimb: await status('POST', base + ':commit', JSON.stringify({ writes: [write] })),
+              newBoard: await status('POST', base + '/boards?documentId=abcdefghjkmnpqrs', JSON.stringify({ fields: { wallKey: { stringValue: 'x' }, wallName: { stringValue: 'x' }, createdAt: { integerValue: '1' } } })),
+              patch: await status('PATCH', base + '/boards/%s/climbs/' + climb.id + '?updateMask.fieldPaths=name', JSON.stringify({ fields: { name: { stringValue: 'Hacked' } } })),
+              remove: await status('DELETE', base + '/boards/%s/climbs/' + climb.id),
+            };
+            return JSON.stringify(results);
+        """ % (code, alex, code, code, code, code, code)
+        seen = js(friend, bare)
+        check('"board":200' in seen and '"climbs":200' in seen and '"oneClimb":200' in seen, f"anybody can read a board and its climbs by its code ({seen})")
+        check('"list":403' in seen or '"list":401' in seen, "but the list of boards cannot be read, so a board's code is still its password")
+        check('"newClimb":403' in seen and '"newBoard":403' in seen and '"patch":403' in seen and '"remove":403' in seen, "and without an account nothing can be added, started, changed or deleted")
+
         print("The friend's own climb comes the other way")
         js(friend, "await app.repo.saveClimb({ wallKey: 'av-wall', name: 'Friend climb', grade: 5, comment: 'made on the other phone', holds: '1:start,2:hand,3:finish' });")
         check(upload(friend, "Friend climb") == "uploaded", "the friend uploaded their climb")
@@ -184,7 +209,8 @@ def main():
         print("Signing out and in")
         js(friend, "await app.sync.signOut();")
         check(js(friend, "return await app.sync.account();") is None, "signed out")
-        check(js(friend, "await app.sync.syncWall('av-wall');").startswith("ERROR signin"), "and nothing can be fetched until signing in again")
+        check(js(friend, "await app.sync.syncWall('av-wall'); return (await app.repo.listClimbs('av-wall')).length;") == 3, "but the board can still be read with no account (the friend still gets the climbs)")
+        check(js(friend, "const c = (await app.repo.listClimbs('av-wall')).find((c) => c.name === 'Friend climb'); await app.sync.upload(c.id);").startswith("ERROR"), "and a draft cannot be uploaded until signing in again")
         check(js(friend, "await app.sync.signIn(%r, %r); return (await app.sync.account()).username;" % (bea, password)) == bea, "signing in again works")
 
         print("Nothing new")

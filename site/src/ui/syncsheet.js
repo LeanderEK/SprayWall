@@ -55,17 +55,17 @@ export async function openSyncSheet() {
     const pieces = [];
     if (!sync.available) {
       pieces.push(h('p', {}, 'Sync is not switched on in this copy of SprayWall yet.'));
-    } else if (!account) {
-      pieces.push(
-        h('p', {}, 'Boards need your account, so that every climb has its maker\'s username on it and nobody can pass as somebody else. Your username is unique and works on any phone.'),
-        h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn primary', onclick: async () => { await askForAccount({ sync, canSkip: true, skipKind: 'cancel' }); render(); } }, 'Sign in or create account')),
-      );
     } else if (!setup) {
       const codeInput = h('input', { class: 'field', type: 'text', placeholder: 'k7f2-9xqm-c4ta-p8dn', 'aria-label': 'Board code', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false' });
       pieces.push(
         h('p', {}, `A board lets friends share climbs on “${wall.name}”. Climbs you make stay on your phone as drafts. When one is ready, press Upload on it and everyone on the board gets it. New climbs from friends arrive by themselves whenever the app is open and online.`),
-        h('p', { class: 'note' }, 'An uploaded climb can never be edited or deleted, by anyone. Star ratings stay on each person’s own phone.'),
-        h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn primary', disabled: busy, onclick: () => run(async () => { await sync.createBoard(wall.key); }) }, 'Start a board')),
+        h('p', { class: 'note' }, 'An uploaded climb can never be edited or deleted, by anyone. Star ratings and likes stay on each person’s own phone.'),
+        account
+          ? h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn primary', disabled: busy, onclick: () => run(async () => { await sync.createBoard(wall.key); }) }, 'Start a board'))
+          : [
+              h('p', { class: 'note' }, 'Starting a board, and uploading to one, needs an account (a username and a password, so every climb has its maker\'s name on it). Joining a board does not.'),
+              h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn primary', onclick: async () => { await askForAccount({ sync, canSkip: true }); render(); } }, 'Make an account to start a board')),
+            ],
         h('h3', {}, 'Or join a friend’s board'),
         h('label', { class: 'field-label' }, 'Board code', codeInput),
         h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn', disabled: busy, onclick: () => run(async () => { await sync.joinBoard(wall.key, codeInput.value); }) }, 'Join')),
@@ -82,12 +82,14 @@ export async function openSyncSheet() {
         h('p', { class: 'note' }, 'Anyone who has this code can see the climbs on this board and upload their own. Uploaded climbs can never be edited or deleted. Only give the code to people you trust.'),
         h('div', { class: state.status === 'error' ? 'sync-status bad' : 'sync-status' }, syncStatusText(state, setup)),
         h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn', disabled: busy || state.status === 'syncing', onclick: () => run(() => sync.syncWall(wall.key)) }, 'Check for new climbs')),
+        account ? null : h('p', { class: 'note' }, 'You have no account yet, so you can see this board\'s climbs but not upload to it.'),
+        account ? null : h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'btn', onclick: async () => { await askForAccount({ sync, canSkip: true }); render(); } }, 'Make an account to upload')),
         h('div', { class: 'row-buttons' }, h('button', { type: 'button', class: 'text-btn danger', onclick: stopSyncing }, 'Stop syncing on this phone')),
       );
     }
     if (busy) pieces.push(h('div', { class: 'sync-status' }, 'Working…'));
     if (problem && (!setup || problem !== sync.stateOf(wall.key).message)) pieces.push(h('div', { class: 'sync-status bad' }, problem));
-    body.replaceChildren(...pieces);
+    body.replaceChildren(...pieces.flat().filter(Boolean));
   }
 
   async function stopSyncing() {

@@ -2,20 +2,22 @@ rules_version = '2';
 
 // The rules of SprayWall's shared database. Paste all of this into Firebase console -> Firestore Database -> Rules -> Publish.
 //
-// Everyone signs in with an account: a username and a password. Firebase wants an email address, so the username is turned
-// into <username>@spraywall.example.com (nobody can ever receive mail there; see domain/sync.js). Firebase keeps the
+// READING needs no account: anyone who knows a board's code can see the board and its climbs. WRITING needs an account:
+// a username and a password. Firebase wants an email address, so the username is turned into
+// <username>@spraywall.example.com (nobody can ever receive mail there; see domain/sync.js). Firebase keeps the
 // addresses unique, so usernames are unique.
 //
 // The database holds boards. A board is found only by its code (16 random letters and digits, so nobody can guess one),
-// and boards cannot be listed. Anyone signed in who knows a board's code may read its climbs and ADD climbs under their
-// OWN username (the `author` of a climb has to match the account that adds it).
+// and boards cannot be listed, so the code is what keeps a board private. Anyone who knows a board's code may read its
+// climbs; anyone signed in may start a board, and ADD climbs under their OWN username (the `author` of a climb has to
+// match the account that adds it).
 // Nobody can change or delete a climb once it is there (there is no update or delete rule at all), and nobody can
 // change or delete a board. Every climb is checked for the right fields, types and sizes, and its `serverTime` has
 // to be the database's own clock. The climb's id is the name of its document.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Signed in with a username and password. (An anonymous sign-in has no email, so it does not count.)
+    // Signed in with a username and password (needed to write). (An anonymous sign-in has no email, so it does not count.)
     function signedIn() {
       return request.auth != null && request.auth.token.email != null;
     }
@@ -36,7 +38,7 @@ service cloud.firestore {
     }
 
     match /boards/{board} {
-      allow get: if signedIn();
+      allow get: if true;
       allow create: if signedIn()
         && board.matches('[a-z2-9]{16}')
         && request.resource.data.keys().hasOnly(['wallKey', 'wallName', 'createdAt'])
@@ -45,7 +47,7 @@ service cloud.firestore {
         && request.resource.data.createdAt is int;
 
       match /climbs/{climb} {
-        allow get, list: if signedIn();
+        allow get, list: if true;
         allow create: if signedIn() && validClimb(request.resource.data, climb);
       }
     }

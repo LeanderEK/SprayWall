@@ -144,8 +144,8 @@ export async function mountViewer(root, { id }) {
     const climb = current();
     if (!app.sync?.available) return toast('Uploading needs a shared board, which is not switched on in this app yet.');
     if (!(await app.sync.account())) {
-      toast('Sign in to your account to upload.');
-      const done = await askForAccount({ sync: app.sync, mode: 'signin', canSkip: true, skipKind: 'cancel' });
+      toast('Uploading needs an account: make one, or sign in.');
+      const done = await askForAccount({ sync: app.sync, canSkip: true });
       if (!done) return;
     }
     if (!(await repo.getSyncSetup(climb.wallKey))) {

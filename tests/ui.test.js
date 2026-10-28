@@ -558,6 +558,28 @@ test('sync sheet: starting a board shows its code and how it went, and stopping 
   app.sync = null;
 });
 
+test('sync sheet: with no account the board can be seen, and the sheet says what needs an account', async () => {
+  const { repo } = await freshApp();
+  await syncWith(repo);
+  await app.sync.createBoard('test-wall');
+  await app.sync.signOut();
+  await openSyncSheet();
+  const text = () => topSheet().textContent;
+  const tidy = () => !text().includes('[object') && !text().includes('null');
+  assert.ok(text().includes('You have no account yet') && buttonWith(topSheet(), 'Make an account to upload') && buttonWith(topSheet(), 'Check for new climbs'), text());
+  assert.ok(tidy(), 'nothing is printed as an object or as null: ' + text());
+
+  click(buttonWith(topSheet(), 'Stop syncing on this phone'));
+  await wait(50);
+  click(buttonWith(document.querySelector('.dialog'), 'Stop syncing'));
+  await wait(200);
+  assert.ok(buttonWith(topSheet(), 'Make an account to start a board') && !buttonWith(topSheet(), 'Start a board'), 'starting a board asks for an account');
+  assert.ok(text().includes('Joining a board does not') && buttonWith(topSheet(), 'Join'), 'but joining is open to everyone: ' + text());
+  assert.ok(tidy(), 'and again nothing is printed as an object or as null: ' + text());
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  app.sync = null;
+});
+
 test('sync sheet: a wrong code, a code nobody has, and no connection are each explained', async () => {
   const { repo } = await freshApp();
   const backend = await syncWith(repo);
@@ -742,7 +764,7 @@ test('account: the dialog creates an account, explains problems in plain words, 
   const waiting = askForAccount({ sync: app.sync });
   const dialog = document.querySelector('.dialog');
   assert.ok(dialog.textContent.includes('Create your account') && dialog.textContent.includes('no way to reset'), 'it says there is no reset');
-  assert.ok(!buttonWith(dialog, 'Start offline') && !buttonWith(dialog, 'Cancel'), 'with no way out offered there is none');
+  assert.ok(!buttonWith(dialog, 'Cancel'), 'with no way out offered there is none');
   const problem = () => dialog.querySelector('[role=alert]').textContent;
   click(buttonWith(dialog, 'Create account'));
   assert.ok(problem().includes('3 to 20'), problem());
@@ -781,7 +803,7 @@ test('account: the dialog creates an account, explains problems in plain words, 
   app.sync = null;
 });
 
-test('account: a new account takes the climbs made on this phone before it; "Start offline" leaves things as they were', async () => {
+test('account: a new account takes the climbs made on this phone before it; Cancel leaves things as they were', async () => {
   const { repo } = await freshApp();
   appWithoutAccount(repo);
   const draft = await repo.saveClimb(climbData({ name: 'Made as tester' }));
@@ -796,18 +818,11 @@ test('account: a new account takes the climbs made on this phone before it; "Sta
   assert.eq((await repo.getClimb(draft.id)).author, 'new-name', 'the draft became the new username\'s');
   app.sync = null;
 
-  const offline = askForAccount({ sync: appWithoutAccount(repo) && app.sync, canSkip: true });
+  const cancelled = askForAccount({ sync: appWithoutAccount(repo) && app.sync, canSkip: true });
   const first = document.querySelector('.dialog.account');
-  assert.ok(first.textContent.includes('you can only make your own'), 'the dialog says what starting offline means');
-  assert.ok(!buttonWith(first, 'Later'), 'there is no vague Later button any more');
-  click(buttonWith(first, 'Start offline'));
-  const question = document.querySelector('.dialog[role=alertdialog]');
-  assert.ok(question && question.textContent.includes('Start offline?') && question.textContent.includes('you can only make your own'), 'it asks again, saying the same');
-  click(buttonWith(question, 'Go back'));
-  assert.ok(!document.querySelector('.dialog[role=alertdialog]') && document.querySelector('.dialog.account'), 'Go back returns to the account dialog');
-  click(buttonWith(document.querySelector('.dialog.account'), 'Start offline'));
-  click(buttonWith(document.querySelector('.dialog[role=alertdialog]'), 'Start offline'));
-  assert.eq(await offline, null);
+  assert.ok(!buttonWith(first, 'Later') && !buttonWith(first, 'Start offline'), 'there is no vague Later button, and no offline choice any more');
+  click(buttonWith(first, 'Cancel'));
+  assert.eq(await cancelled, null);
   assert.ok(!document.querySelector('.dialog'));
   app.sync = null;
 });
@@ -831,7 +846,7 @@ test('share sheet: signed in it shows who you are and can sign out; signed out i
   click(buttonWith(topSheet(), 'Sign in or create account'));
   await wait(100);
   const dialog = document.querySelector('.dialog');
-  assert.ok(dialog && dialog.textContent.includes('Create your account') && buttonWith(dialog, 'Cancel') && !buttonWith(dialog, 'Start offline'), 'from here it is a plain Cancel');
+  assert.ok(dialog && dialog.textContent.includes('Create your account') && buttonWith(dialog, 'Cancel'), 'from here it is a plain Cancel');
   click(buttonWith(dialog, 'Cancel'));
   await wait(50);
   app.sync = null;
@@ -845,7 +860,7 @@ test('viewer: uploading while signed out asks you to sign in first', async () =>
   click(buttonWith(root, 'Upload'));
   await wait(150);
   const dialog = document.querySelector('.dialog');
-  assert.ok(dialog && dialog.querySelector('h2').textContent === 'Sign in', 'it asks to sign in');
+  assert.ok(dialog && dialog.querySelector('h2').textContent === 'Create your account' && buttonWith(dialog, 'I already have an account'), 'it asks for an account: make one, or sign in');
   click(buttonWith(dialog, 'Cancel'));
   await wait(100);
   assert.ok(!(await repo.getClimb(draft.id)).publishedAt, 'nothing was uploaded');

@@ -1,21 +1,15 @@
 import { MAX_USERNAME, USERNAME_HELP, cleanUsername } from '../domain/climbs.js';
 import { MIN_PASSWORD, SyncError } from '../domain/sync.js';
-import { confirmDialog, followKeyboard, h } from './dom.js';
-
-// What starting offline means, said on the dialog and again in the question that asks if you are sure.
-export const OFFLINE_WARNING = 'You will not see any climbs from other people, and you can only make your own climbs.';
+import { followKeyboard, h } from './dom.js';
 
 /**
  * The account dialog: create an account (a unique username and a password) or sign in to one you already have, on this
- * or any phone. With `canSkip` there is also a "Later" button; without it the dialog stays until it is done, because
- * every user needs a username. Resolves with the username, or null if it was skipped.
- *
- * `canSkip` shows a way out. With `skipKind` 'offline' (the first time the app opens) it is a clear "Start offline" button that says what
- * that means and asks again before it is taken; with 'cancel' (when you came here to sign in for something) it is a plain Cancel.
+ * or any phone. It is asked for when an account is needed (to upload a climb or start a board). With `canSkip` there is a
+ * Cancel button; without it the dialog stays until it is done. Resolves with the username, or null if it was cancelled.
  *
  * `sync` is the SyncService (it does the signing up and in); `suggest` is a username to start with.
  */
-export function askForAccount({ sync, suggest = '', canSkip = false, skipKind = 'offline', mode = 'create' }) {
+export function askForAccount({ sync, suggest = '', canSkip = false, mode = 'create' }) {
   return new Promise((resolve) => {
     let creating = mode === 'create';
     let busy = false;
@@ -27,17 +21,10 @@ export function askForAccount({ sync, suggest = '', canSkip = false, skipKind = 
     const again = h('input', { class: 'field', type: 'password', name: 'password-again', 'aria-label': 'Password again', placeholder: 'Password again', maxlength: 128, autocomplete: 'new-password' });
     const submit = h('button', { type: 'submit', class: 'btn primary wide' });
     const switcher = h('button', { type: 'button', class: 'text-btn', onclick: () => { creating = !creating; problem.textContent = ''; show(); } });
-    const cancel = canSkip && skipKind === 'cancel' ? h('button', { type: 'button', class: 'text-btn', onclick: () => finish(null) }, 'Cancel') : null;
-    const goOffline = async () => {
-      const sure = await confirmDialog({ title: 'Start offline?', text: `${OFFLINE_WARNING} You can make an account later, from the Share and import button.`, confirmLabel: 'Start offline', cancelLabel: 'Go back', onTop: true });
-      if (sure) finish(null);
-    };
-    const offline = canSkip && skipKind === 'offline'
-      ? h('div', { class: 'offline-box' }, h('p', { class: 'note' }, `No account? ${OFFLINE_WARNING}`), h('button', { type: 'button', class: 'btn outline wide', onclick: goOffline }, 'Start offline'))
-      : null;
+    const cancel = canSkip ? h('button', { type: 'button', class: 'text-btn', onclick: () => finish(null) }, 'Cancel') : null;
     const form = h('form', { onsubmit: (event) => { event.preventDefault(); go(); } }, username, password, again, problem, h('div', { class: 'dialog-actions spread' }, switcher, cancel, submit));
     const backdrop = h('div', { class: 'backdrop' });
-    const dialog = h('div', { class: 'dialog account', role: 'dialog', 'aria-label': 'Your account' }, title, intro, form, offline);
+    const dialog = h('div', { class: 'dialog account', role: 'dialog', 'aria-label': 'Your account' }, title, intro, form);
 
     function show() {
       title.textContent = creating ? 'Create your account' : 'Sign in';

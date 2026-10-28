@@ -31,11 +31,14 @@ at all (try aeroplane mode). New versions install themselves: you do not tap any
 > iPhone / iPad: use the Home Screen icon every time. Safari tabs and the Home Screen app keep **separate** data, so climbs
 > made in one do not appear in the other.
 
-### Make your account
+### Make an account, only when you want to upload
 
-The first time it opens, SprayWall asks you to create an account: a **username** and a **password**. (You can tap
-**Start offline** instead: it says that you will not see any climbs from other people and can only make your own, and asks you to
-confirm. You need an account to upload climbs and to receive other people's, and you can make one later from the share icon.)
+**You do not need an account to use SprayWall.** Open it and the AV wall and everyone's climbs are there: you can look at them,
+rate them, mark them sent, set climbs of your own and keep them as drafts, all without being asked for anything.
+
+An account is needed for one thing: **uploading** a climb (or starting a board of your own). The first time you tap **Upload** it
+asks you to create one: a **username** and a **password**. You can also make one any time from the share icon. Climbs you made
+before you had an account become yours, under the new username.
 
 * The username is **yours alone** (nobody else can have it), 3 to 20 letters, digits, dashes or underscores, always lowercase.
   It is shown on every climb you upload.
@@ -43,13 +46,13 @@ confirm. You need an account to upload climbs and to receive other people's, and
   (a password manager helps). If you do lose it, ask the person who runs the project to delete your account; you can then
   make it again with the same username, and the climbs you uploaded count as yours again.
 * The same username and password sign you in on **any** phone: on the new phone choose **I already have an account**.
-* You need a connection for this step only. Everything else works offline.
+* You need a connection to make or sign in to an account. Everything else works offline.
 
 ### The AV wall and its shared climbs: automatic
 
-A **wall** is a photo of the board plus a map of where every hold is. Straight after you make your account (or start offline) a "Setting up"
-screen downloads the **AV wall** and adds it, and, once you have an account, **joins the AV board**, so every climb anyone has
-uploaded is already in your list. That takes a few seconds, once. If there was no connection it says so and tries again next time;
+A **wall** is a photo of the board plus a map of where every hold is. The first time the app opens, a "Setting up"
+screen downloads the **AV wall** and adds it, and **joins the AV board**, so every climb anyone has
+uploaded is already in your list (no account needed to read them). That takes a few seconds, once. If there was no connection it says so and tries again next time;
 you can also tap the **mountain icon** (Walls) and **Get the AV wall**.
 
 * If you do not want the wall, delete it under Walls (the bin) and it will not come back by itself. Add your own wall next to it
@@ -100,15 +103,15 @@ like with the pencil and bin buttons.
 
 There are two ways, and you can use either or both.
 
-**A. Shared board (automatic, needs an account)**
+**A. Shared board (automatic; an account only to upload or to start a board)**
 
 1. **The AV board needs nothing from you:** you join it when the app sets up. Its code is in the app, so anyone who installs SprayWall
    is on it, and everyone sees everyone's uploaded climbs.
 2. **A private board for a smaller group:** one person taps the **share icon**, then **Sync with friends**, then
-   **Stop syncing on this phone** (you can only be on one board per wall), then **Start a board**. They get a **board code** like
-   `k7f2-9xqm-c4ta-p8dn` to **Copy** or **Share** to friends (the code is the password to that board). Everyone else does the same
-   but types the code under **Join a friend's board** and taps **Join**.
-3. To publish a climb, open your draft and tap **Upload**, then confirm. It goes to the board and appears on everyone's phone
+   **Stop syncing on this phone** (you can only be on one board per wall), then **Start a board** (this needs an account). They get a
+   **board code** like `k7f2-9xqm-c4ta-p8dn` to **Copy** or **Share** to friends (the code is the password to that board). Everyone
+   else does the same but types the code under **Join a friend's board** and taps **Join** (no account needed to join and read).
+3. To publish a climb, open your draft and tap **Upload** (it asks you to make an account the first time), then confirm. It goes to the board and appears on everyone's phone
    within moments. **Once a climb is uploaded nobody can edit or delete it, you included**, so check it first.
    Uploaded climbs show a small **Uploaded** tag. Only climbs you made (with your username) can be uploaded.
 4. New climbs from friends arrive by themselves whenever the app is open and you have a connection (you can also tap
@@ -129,7 +132,7 @@ There are two ways, and you can use either or both.
   Back up now and then with **Share all as a file**.
 * **iOS does not let apps work in the background**, so a phone picks up friends' new climbs the next time the app is open.
 * You can leave a board with **Sync with friends → Stop syncing on this phone**. Your climbs stay. **Sign out** (share icon)
-  keeps everything on the phone too, but you cannot upload or receive climbs until you sign in again.
+  keeps everything on the phone too, and you still receive the board's climbs; you just cannot upload until you sign in again.
 
 ---
 
@@ -151,8 +154,8 @@ There are two ways, and you can use either or both.
   serves them; a *service worker* saves a complete copy on your device so it opens offline.
 * **Your device** keeps everything personal in the browser's database (IndexedDB): the wall photo and holds, all climbs
   (drafts and uploaded), your ratings, sent marks, username and sign-in, and the codes of boards you joined.
-* **Firebase** is Google's free hosting for two things only: **accounts** (usernames and passwords; Google stores the passwords
-  safely, the app never sees or keeps them) and the **shared boards** (uploaded climbs).
+* **Firebase** is Google's free hosting for two things only: **accounts** (usernames and passwords, needed only to upload; Google
+  stores the passwords safely, the app never sees or keeps them) and the **shared boards** (uploaded climbs).
 
 ### What is public and what is private
 
@@ -190,7 +193,8 @@ renewed automatically; the password is not stored.
 ### Boards and uploading
 
 * A **board** belongs to one wall and is found only by its 16-character random code (about 79 bits: it cannot be guessed, and
-  boards cannot be listed). Anyone who has the code and is signed in can **read** the board's climbs and **add** their own.
+  boards cannot be listed). Anyone who has the code can **read** the board's climbs, with or without an account; adding your own
+  needs an account.
 * **Uploading** adds one document to the board with the climb's name, grade, comment, author, holds and the time the database
   received it. The database's rules then allow **no change and no deletion** of it, by anyone.
 * **Receiving**: each phone asks "anything newer than my last visit?" using the database's own clock stamps (so a phone with a
@@ -204,14 +208,16 @@ renewed automatically; the password is not stored.
 The rules in [`firebase/firestore.rules`](firebase/firestore.rules) run on Google's servers, so a hacked or hand-made copy of
 the app cannot get round them. They allow only this:
 
-* you must be signed in with a username and password (anonymous visitors are refused);
-* boards can be created and read by code, never listed, changed or deleted;
+* **reading** needs no account: a board and its climbs can be read by anybody who knows the board's code (a board is never
+  listed, so the code is its password);
+* **writing** needs an account: you must be signed in with a username and password (anonymous visitors are refused) to start a
+  board or add a climb; boards are never changed or deleted;
 * a climb can be **added** to a board, once, and the **author must be the account that adds it**: you cannot upload under
   someone else's name. It must have the right fields, types and sizes, and valid holds;
 * a climb can never be updated or deleted.
 
 This was tested against the real project with hand-made requests (see `tools/firebase_check.py`). What it cannot prevent:
-someone with a board's code who is signed in can upload their own (valid) climbs to it. For a private board that is why the code
+someone with a board's code can read it, and one who is signed in can also upload their own (valid) climbs to it. For a private board that is why the code
 is shared only with friends. **The AV board's code is public on purpose** (so that installing the app is all it takes), which makes
 it an open board: anyone can make an account and upload climbs there, and an uploaded climb is permanent. If an unwanted climb gets
 in, only the project owner can remove it, in the Firebase console (Firestore Database → Data). If the AV board were ever
@@ -398,7 +404,7 @@ site/            the app itself (this is all that is served)
   src/ui/        the screens (facebar.js is the map and face buttons of a long wall)
   src/sync-config.js   the Firebase project values
   src/defaults.js      the wall and board every new install starts with
-  src/setup.js         what happens when the app opens: your account, then the default wall and board
+  src/setup.js         what happens when the app opens: your name, then the default wall and board
 wall/            the AV wall pack, starter climbs and the download page
 firebase/        the database rules
 tests/           the tests (they run in a browser) and a fake Firebase
@@ -414,11 +420,11 @@ in `tools/.venv` with `pip install websocket-client` first.
 | Command | What it does |
 | --- | --- |
 | `python tools/serve.py` | try the app at http://localhost:8080/site/ (tests at /tests/). `--lan` serves only the app to your Wi-Fi |
-| `tools\.venv\Scripts\python.exe tools\run_tests.py` | all unit and screen tests (116 + 44) |
+| `tools\.venv\Scripts\python.exe tools\run_tests.py` | all unit and screen tests (127 + 55) |
 | `... tools\offline_check.py` | installs the app, switches the server off, proves it still works, and tests updates |
 | `... tools\share_check.py` | three separate browser profiles share a link and a file |
-| `... tools\first_run_check.py` | against the **real** project: two brand-new phones open the app, the AV wall and board are set up by themselves (read-only on the board); the test accounts are removed |
-| `... tools\firebase_check.py` | against the **real** Firebase project: accounts, uploads, "no editing or deleting", no uploading under another name. Makes two test accounts and removes them again; leaves a test board |
+| `... tools\first_run_check.py` | against the **real** project: a brand-new phone opens the app and is asked nothing, the AV wall and board are set up by themselves with no account (read-only on the board), and an account made afterwards works; the test account is removed |
+| `... tools\firebase_check.py` | against the **real** Firebase project: accounts, uploads, "no editing or deleting", no uploading under another name, reading with no account but no writing. Makes two test accounts and removes them again; leaves a test board |
 | `python tools/stamp.py` | rewrites the offline file list and version (the publishing workflow also does this) |
 | `python tools/make_wall_pack.py` | builds and checks wall packs (part 3) |
 | `... tools\check_modules.py`, `peek_tests.py` | find a script that fails to load, or a test that hangs |
@@ -440,7 +446,7 @@ Only if they use *this* app copy and start a board. All boards made through http
 same Firebase project (the one used by this app), but each board is separate: it has its own random code, and its climbs are only
 visible to people who have that code. So a stranger's own wall climbs never appear on the AV wall board unless they use the AV wall, and nothing from the AV board
 appears on theirs. (Everyone gets the AV wall by default; delete it under Walls if you only want your own.) They do share the project's free daily limits and the accounts list. Climbs stay on the phone (and are
-never sent anywhere) unless the person creates an account, starts a board and taps **Upload**. For a fully separate setup,
+never sent anywhere) unless the person creates an account and taps **Upload**. For a fully separate setup,
 fork the project and use your own Firebase ([part 4](#4-running-your-own-copy-and-developing)).
 
 **What if two different walls use the same key?**
@@ -454,14 +460,15 @@ That is the point: a board is a permanent shared list. Draft carefully, check th
 happy. Drafts can be edited and deleted freely.
 
 **I lost my phone / got a new one.**
-Install the app, sign in with your username and password, import the wall, and join your board again with its code. Your uploaded
-climbs return. Drafts, ratings and sent marks were only on the old phone (unless you saved a backup file).
+Install the app (the AV wall and board come by themselves), or import the wall and join your board again with its code, and sign in
+with your username and password when you want to upload. Your uploaded climbs return. Drafts, ratings and sent marks were only on the old phone (unless you saved a backup file).
 
 **Can I use it without an account?**
-Not in the public app: every user makes an account the first time (it needs a connection once), so that every climb has a real,
-unique username on it. A phone can tap **Start offline** and carry on locally (after a confirmation), setting, viewing,
-rating and sharing climbs by file or link, but it cannot upload or receive friends' climbs until it signs in. A copy with no
-Firebase project (part 4) has no accounts and only asks for a name.
+Yes, for everything except uploading. With no account a phone gets the AV wall, receives everyone's uploaded climbs (and keeps them
+for offline use), can join a friend's board by its code, rates, likes and marks climbs sent, sets climbs as drafts, and shares by
+file or link. An account (a username and password, made when you tap **Upload**) is needed to **upload** a climb or **start a
+board**, so that every uploaded climb has a real, unique username on it. A copy with no Firebase project (part 4) has no accounts
+and only asks for a name.
 
 **Is my data safe?**
 Your climbs and ratings live on your device. Accounts and uploaded climbs are in Google's Firebase. Passwords are handled only by

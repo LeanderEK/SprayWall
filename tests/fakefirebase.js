@@ -99,10 +99,14 @@ export class FakeFirebase {
     const root = `/v1/projects/${this.projectId}/databases/(default)/documents`;
     if (!address.pathname.startsWith(root)) return reply(404, { error: { status: 'NOT_FOUND', message: 'wrong project' } });
     const email = this.#signedIn(headers);
-    if (!email) return reply(401, { error: { code: 401, status: 'UNAUTHENTICATED', message: 'Missing or invalid authentication' } });
+    // A token that is sent but no longer good is refused outright, even where the rules would let anybody in (like the real database).
+    if (!email && headers.get('Authorization')) return reply(401, { error: { code: 401, status: 'UNAUTHENTICATED', message: 'Missing or invalid authentication' } });
     if (this.quotaUsedUp) return reply(429, { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded.' } });
     const path = decodeURIComponent(address.pathname.slice(root.length)).replace(/^\//, '');
     const json = body ? JSON.parse(body) : {};
+
+    // Reading needs no account; everything that writes does.
+    if (!email && ((method === 'POST' && (path === 'boards' || path === ':commit')) || method === 'PATCH' || method === 'DELETE' || method === 'PUT')) return reply(403, DENIED);
 
     if (method === 'POST' && path === 'boards') {
       const code = address.searchParams.get('documentId');

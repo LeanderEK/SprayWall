@@ -265,8 +265,10 @@ test('firebase: an account is made once, kept between visits, renewed when the t
   const tokens = memoryTokens();
   const remote = remoteFor(backend, tokens);
   assert.eq(await remote.account(), null, 'nobody is signed in at first');
-  assert.eq(await kindOf(remote.getBoard(CODE)), 'signin', 'and nothing can be asked');
-  assert.eq(count(backend, 'documents'), 0, 'without even trying');
+  assert.eq(await remote.getBoard(CODE), null, 'a board can be asked about without an account (there is none with that code)');
+  const asked = count(backend, 'documents');
+  assert.eq(await kindOf(remote.createBoard(CODE, { wallKey: 'av-wall', wallName: 'AV wall' })), 'signin', 'but making one needs an account');
+  assert.eq(count(backend, 'documents'), asked, 'which is not even tried');
   assert.eq(await remote.signUp('zeke', PASSWORD), 'zeke');
   assert.eq(await remote.account(), { username: 'zeke' });
   assert.ok(backend.users.has(emailFor('zeke')), 'the account has the email-style name');
@@ -301,7 +303,8 @@ test('firebase: usernames are unique, wrong passwords are refused, a removed acc
   assert.eq(await kindOf(second.signUp('short-one', 'short')), 'weak');
   await first.signOut();
   assert.eq(await first.account(), null);
-  assert.eq(await kindOf(first.getBoard(CODE)), 'signin', 'signed out means nothing can be asked');
+  assert.eq(await first.getBoard(CODE), null, 'signed out, a board can still be read');
+  assert.eq(await kindOf(first.createClimb(CODE, 'abcdefgh1', { name: 'x', author: 'zeke', holds: '1:start', createdAt: 1 })), 'signin', 'but nothing can be written');
   await first.signIn('zeke', PASSWORD);
   backend.deleteUser(emailFor('zeke')); // the project owner removed the account in the console
   backend.clock.now += 3700_000;
@@ -403,20 +406,67 @@ test('account: signing up checks the username and password, takes the username f
   assert.eq(await b.repo.authorName(), 'alex', 'signing out keeps the name on the phone');
 });
 
-test('account: signed out, a board cannot be fetched from or uploaded to, and signing in again makes it work', async () => {
+test('account: signed out, a board can still be read, but not uploaded to or started, and signing in makes uploading work', async () => {
   const backend = new FakeFirebase();
   const a = await phone(backend, 'alex');
   const draft = await a.repo.saveClimb(climbData({ name: 'Waiting' }));
   await a.sync.createBoard('av-wall');
   await a.sync.signOut();
   assert.eq(await kindOf(a.sync.upload(draft.id)), 'signin');
-  assert.eq(await kindOf(a.sync.syncWall('av-wall')), 'signin');
-  assert.eq(a.sync.stateOf('av-wall').kind, 'signin');
   assert.eq(await kindOf(a.sync.createBoard('av-wall')), 'signin');
+  const result = await a.sync.syncWall('av-wall');
+  assert.eq(result.added, 0, 'reading the board works with no account');
+  assert.eq(a.sync.stateOf('av-wall').status, 'ok');
   await a.sync.signIn('alex', 'alex-password');
-  assert.eq(a.sync.stateOf('av-wall').status, 'idle', 'the signed-out message goes');
   await a.sync.upload(draft.id);
   assert.ok(isUploaded(await a.repo.getClimb(draft.id)));
+});
+
+test('no account: a phone that has never had one joins a board, receives its climbs and keeps them, and cannot write', async () => {
+  const backend = new FakeFirebase();
+  const a = await phone(backend, 'alex');
+  const one = await a.repo.saveClimb(climbData({ name: 'For everyone', holds: '1:start,5:finish' }));
+  const code = await a.sync.createBoard('av-wall');
+  await a.sync.upload(one.id);
+  tick(backend);
+
+  const guest = await phone(backend, ''); // a phone with no account (it has the wall)
+  assert.eq(await guest.sync.account(), null);
+  await guest.sync.joinBoard('av-wall', code);
+  assert.eq((await guest.repo.listClimbs('av-wall')).map((c) => c.name), ['For everyone'], 'the shared climbs arrive');
+  assert.ok(isUploaded((await guest.repo.listClimbs('av-wall'))[0]));
+  assert.eq(guest.sync.stateOf('av-wall').status, 'ok');
+
+  const mine = await guest.repo.saveClimb(climbData({ name: 'Guest draft' }));
+  assert.eq(await kindOf(guest.sync.upload(mine.id)), 'signin', 'uploading asks for an account');
+  assert.ok(!isUploaded(await guest.repo.getClimb(mine.id)), 'and nothing was uploaded');
+  assert.eq(await kindOf(guest.sync.createBoard('av-wall')), 'signin', 'so does starting a board');
+
+  tick(backend);
+  const later = await a.repo.saveClimb(climbData({ name: 'Later one', holds: '2:start,6:finish' }));
+  await a.sync.upload(later.id);
+  tick(backend);
+  await guest.sync.syncWall('av-wall');
+  assert.eq((await guest.repo.listClimbs('av-wall')).map((c) => c.name).sort(), ['For everyone', 'Guest draft', 'Later one'], 'new climbs keep arriving with no account');
+
+  await guest.sync.signUp('gus', 'gus-password');
+  assert.eq((await guest.repo.getClimb(mine.id)).author, 'gus', 'when the account comes, the guest\'s drafts become the new username\'s');
+  await guest.sync.upload(mine.id);
+  assert.ok(isUploaded(await guest.repo.getClimb(mine.id)), 'and then uploading works');
+});
+
+test('no account: the database refuses to be written to without one, even by a hand-made request', async () => {
+  const backend = new FakeFirebase();
+  const a = await phone(backend, 'alex');
+  const code = await a.sync.createBoard('av-wall');
+  const root = `https://firestore.googleapis.com/v1/projects/${backend.projectId}/databases/(default)/documents`;
+  const climb = { name: 'sneaky', author: 'alex', holds: '1:start', createdAt: { integerValue: '1' } };
+  const write = { update: { name: `projects/${backend.projectId}/databases/(default)/documents/boards/${code}/climbs/sneaky-climb1`, fields: { name: { stringValue: 'sneaky' }, author: { stringValue: 'alex' }, holds: { stringValue: '1:start' }, createdAt: { integerValue: '1' } } }, updateTransforms: [{ fieldPath: 'serverTime', setToServerValue: 'REQUEST_TIME' }], currentDocument: { exists: false } };
+  const post = (url, body) => backend.fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  assert.eq((await post(`${root}:commit`, { writes: [write] })).status, 403, 'no climb without an account');
+  assert.eq((await post(`${root}/boards?documentId=${code.split('').reverse().join('')}`, { fields: { wallKey: { stringValue: 'x' }, wallName: { stringValue: 'x' }, createdAt: { integerValue: '1' } } })).status, 403, 'no board without an account');
+  assert.eq((await backend.fetch(`${root}/boards/${code}`, { method: 'GET', headers: {} })).status, 200, 'but a board can be read');
+  assert.ok(climb.name);
 });
 
 // ---- phones and a board ----

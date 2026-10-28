@@ -191,17 +191,17 @@ export function openSheet(title, content, { onClose = null } = {}) {
 }
 
 /** A question in the middle of the screen. Resolves true for the main button, false otherwise. */
-export function confirmDialog({ title, text, confirmLabel = 'OK', cancelLabel = 'Cancel', danger = false, onTop = false }) {
+export function confirmDialog({ title, text, confirmLabel = 'OK', cancelLabel = 'Cancel', danger = false }) {
   return new Promise((resolve) => {
     const finish = (answer) => {
       backdrop.remove();
       dialog.remove();
       resolve(answer);
     };
-    const backdrop = h('div', { class: onTop ? 'backdrop top' : 'backdrop', onclick: () => finish(false) });
+    const backdrop = h('div', { class: 'backdrop', onclick: () => finish(false) });
     const dialog = h(
       'div',
-      { class: onTop ? 'dialog top' : 'dialog', role: 'alertdialog', 'aria-label': title },
+      { class: 'dialog', role: 'alertdialog', 'aria-label': title },
       h('h2', {}, title),
       text ? h('p', {}, text) : null,
       h('div', { class: 'dialog-actions' }, h('button', { type: 'button', class: 'text-btn', onclick: () => finish(false) }, cancelLabel), h('button', { type: 'button', class: danger ? 'text-btn danger' : 'text-btn', onclick: () => finish(true) }, confirmLabel)),

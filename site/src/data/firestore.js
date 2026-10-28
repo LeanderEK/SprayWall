@@ -7,8 +7,8 @@ import { SyncError, emailFor, fromFields, idFromName, toFields } from '../domain
 //     same username and password gives that phone the account. The phone keeps a token, not the password;
 //   - Firestore, the database: boards/<code> holds the board, boards/<code>/climbs/<id> holds one climb each.
 // Who may do what is decided by the rules in firebase/firestore.rules, which are pasted into the Firebase console:
-// anyone signed in who knows a board's code may read its climbs, and add climbs under their own username; nobody may
-// change or delete one.
+// anyone who knows a board's code may read its climbs (no account needed); anyone signed in may start a board and add
+// climbs under their own username; nobody may change or delete one.
 
 const SIGN_UP = 'https://identitytoolkit.googleapis.com/v1/accounts:signUp';
 const SIGN_IN = 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword';
@@ -118,6 +118,16 @@ export class FirestoreRemote {
     }
   }
 
+  /**
+   * A request that anybody may make (reading a board): with the account's token if there is one, and with none if nobody is signed in
+   * on this phone. (With the older rules, which want an account to read, only the signed-in way works.)
+   */
+  async #read(url, options = {}) {
+    await this.account();
+    if (!this.auth?.username) return this.#send(url, options);
+    return this.#call(url, options);
+  }
+
   async #call(url, options = {}) {
     try {
       return await this.#send(url, { ...options, token: await this.#token() });
@@ -139,7 +149,7 @@ export class FirestoreRemote {
   /** { wallKey, wallName }, or null if no board has that code. */
   async getBoard(code) {
     try {
-      const doc = await this.#call(`${this.#documents}/boards/${encodeURIComponent(code)}`, { method: 'GET' });
+      const doc = await this.#read(`${this.#documents}/boards/${encodeURIComponent(code)}`, { method: 'GET' });
       const fields = doc?.fields || {};
       const text = (key) => (typeof fields[key]?.stringValue === 'string' ? fields[key].stringValue : '');
       return { wallKey: text('wallKey'), wallName: text('wallName') };
@@ -187,7 +197,7 @@ export class FirestoreRemote {
       limit: PAGE,
     };
     if (since) query.where = { fieldFilter: { field: { fieldPath: 'serverTime' }, op: inclusive ? 'GREATER_THAN_OR_EQUAL' : 'GREATER_THAN', value: { timestampValue: since } } };
-    const answer = await this.#call(`${this.#documents}/boards/${encodeURIComponent(code)}:runQuery`, { json: { structuredQuery: query } });
+    const answer = await this.#read(`${this.#documents}/boards/${encodeURIComponent(code)}:runQuery`, { json: { structuredQuery: query } });
     const records = (Array.isArray(answer) ? answer : [])
       .filter((item) => item && item.document)
       .map((item) => ({ id: idFromName(item.document.name), ...fromFields(item.document.fields) }));

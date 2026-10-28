@@ -85,14 +85,14 @@ export async function openSharingSheet() {
   const account = online ? await app.sync.account() : null;
   const canChange = await app.repo.canChangeUsername();
   const signOut = async () => {
-    if (!(await confirmDialog({ title: 'Sign out?', text: 'Your climbs stay on this phone. Until you sign in again you cannot upload or receive new climbs. Sign in again with your username and password, on this or any phone.', confirmLabel: 'Sign out', danger: true }))) return;
+    if (!(await confirmDialog({ title: 'Sign out?', text: 'Your climbs stay on this phone. You still receive the shared climbs, but you cannot upload until you sign in again. Sign in again with your username and password, on this or any phone.', confirmLabel: 'Sign out', danger: true }))) return;
     await app.sync.signOut();
     sheet.close();
     toast('Signed out.');
   };
   const signIn = async () => {
     sheet.close();
-    await askForAccount({ sync: app.sync, canSkip: true, skipKind: 'cancel' });
+    await askForAccount({ sync: app.sync, canSkip: true });
   };
   const changeName = async () => {
     const next = await promptDialog({ title: 'Change username', label: 'Username', value: name, confirmLabel: 'Save', maxLength: 20 });
@@ -118,8 +118,8 @@ export async function openSharingSheet() {
     { class: 'sheet-body' },
     online
       ? [
-          h('div', { class: 'row-between' }, h('div', {}, h('div', { class: 'detail-label' }, account ? 'Signed in as' : 'Not signed in'), h('div', { class: 'username' }, account ? account.username : name || '—')), account ? h('button', { type: 'button', class: 'text-btn', onclick: signOut }, 'Sign out') : h('button', { type: 'button', class: 'btn', onclick: signIn }, 'Sign in or create account')),
-          account ? h('p', { class: 'note' }, 'Your username is yours alone and is the same on every phone you sign in on.') : h('p', { class: 'note' }, 'Without an account you cannot upload climbs or receive friends\' climbs. Everything else works.'),
+          h('div', { class: 'row-between' }, h('div', {}, h('div', { class: 'detail-label' }, account ? 'Signed in as' : 'Not signed in'), account || name ? h('div', { class: 'username' }, account ? account.username : name) : null), account ? h('button', { type: 'button', class: 'text-btn', onclick: signOut }, 'Sign out') : h('button', { type: 'button', class: 'btn', onclick: signIn }, 'Sign in or create account')),
+          account ? h('p', { class: 'note' }, 'Your username is yours alone and is the same on every phone you sign in on.') : h('p', { class: 'note' }, 'You can see the shared climbs without an account. You need one to upload your own climbs or to start a board.'),
         ]
       : [
           h('div', { class: 'row-between' }, h('div', {}, h('div', { class: 'detail-label' }, 'Your username'), h('div', { class: 'username' }, name)), canChange ? h('button', { type: 'button', class: 'text-btn', onclick: changeName }, 'Change') : h('span', { class: 'tag' }, 'Locked')),

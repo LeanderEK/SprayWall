@@ -5,11 +5,12 @@ import { importWallPack } from './data/wallimport.js';
 // What happens when the app opens: working out who you are, then putting the default wall and board in place (defaults.js).
 
 /**
- * Everyone has a username. With a Firebase project it comes from an account (unique, and the same on every phone): the
- * account dialog is shown (with a "Start offline" button) unless the person already skipped it or is signed in. Without a Firebase
- * project a name on this phone is all there is. Returns 'account', 'skipped' or 'local'.
+ * Who you are when the app opens. With a Firebase project nobody is asked anything: an account (a unique username, the same on
+ * every phone) is only needed to upload a climb or start a board, and the app asks for it then; until then the shared climbs can be
+ * read without one. Without a Firebase project a name on this phone is all there is, and it is asked for once.
+ * Returns 'account' (signed in), 'none' (no account yet) or 'local' (no Firebase project).
  */
-export async function ensureIdentity({ repo, sync, askForAccount, askForUsername }) {
+export async function ensureIdentity({ repo, sync, askForUsername }) {
   const account = await sync.account();
   if (account) {
     await repo.setUsername(account.username, { force: true, renameDrafts: false });
@@ -22,13 +23,7 @@ export async function ensureIdentity({ repo, sync, askForAccount, askForUsername
     return 'local';
   }
   if (local) await repo.setUsername(local);
-  if (await repo.getMeta('accountSkipped')) return 'skipped';
-  const done = await askForAccount({ sync, suggest: local || '', canSkip: true });
-  if (done === null) {
-    await repo.setMetaQuietly('accountSkipped', true);
-    return 'skipped';
-  }
-  return 'account';
+  return 'none';
 }
 
 /** Downloads a file that is part of the site (a minute at most), as a Blob. */
@@ -93,10 +88,10 @@ export async function refreshDefaultWall({ repo, config = DEFAULTS, fetchPack = 
  * Puts the default wall and board in place, once. It is safe to call whenever something changes (it is called when the app opens
  * and again after signing in), because each step only happens if it has not been done:
  *   - the wall is downloaded and imported unless this phone has it, or has had it (so a wall you deleted does not come back);
- *   - the board is joined once there is a wall and an account, unless this phone already has a board for it, or you stopped
- *     using one (so leaving the board is final).
- * Returns { wall, board, problem }: wall is 'had', 'imported', 'failed' or 'skipped'; board is 'had', 'joined', 'waiting'
- * (for an account), 'stopped', 'failed' or 'skipped'.
+ *   - the board is joined once there is a wall (no account is needed to read it), unless this phone already has a board for it,
+ *     or you stopped using one (so leaving the board is final).
+ * Returns { wall, board, problem }: wall is 'had', 'imported', 'failed' or 'skipped'; board is 'had', 'joined', 'stopped',
+ * 'failed' or 'skipped'.
  */
 export async function ensureDefaults({ repo, sync, config = DEFAULTS, fetchPack, importPack, progress = () => {} }) {
   const result = { wall: 'skipped', board: 'skipped', problem: '' };
@@ -123,10 +118,6 @@ export async function ensureDefaults({ repo, sync, config = DEFAULTS, fetchPack,
   if (await repo.getSyncSetup(wall.key)) {
     await repo.setMetaQuietly(MEMORY.board, 'done');
     result.board = 'had';
-    return result;
-  }
-  if (!(await sync.account())) {
-    result.board = 'waiting';
     return result;
   }
   progress('Joining the AV board…');

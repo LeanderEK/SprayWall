@@ -336,14 +336,3 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 8px 0; }
 .like-btn.on, .badge.like { color: #ff5a78; }
 .like-btn.on svg { fill: #ff5a78; stroke: #ff5a78; }
 .badge.like { background: transparent; padding: 0 2px; font-size: 14px; }
-
-/* the offline choice on the account dialog */
-.offline-box { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-.offline-box .note { margin: 0 0 8px; }
-
-.btn.outline { background: transparent; border: 2px solid var(--outline); }
-.btn.outline:active { background: var(--surface3); }
-
-/* a question asked while another dialog is open goes above it, and dims it */
-.backdrop.top { z-index: 70; }
-.dialog.top { z-index: 71; }

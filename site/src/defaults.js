@@ -4,11 +4,12 @@ import { isFirstAvWall } from './domain/wallpack.js';
 //
 //   - the wall: the app downloads this wall pack (it is published next to the app, in the repository's `wall` folder) and
 //     imports it the first time it opens;
-//   - the board: once the person has an account, the app joins this shared board for that wall, so the climbs other people
-//     uploaded appear and the person can upload their own.
+//   - the board: the app joins this shared board for that wall, so the climbs other people uploaded appear. Reading a board needs
+//     no account; the person makes one (a username and a password) when they want to upload their own.
 //
 // The board code is the password to the board. Putting it here, in a public repository, makes the board open to everyone
-// who installs the app (anyone can make an account and upload climbs to it), which is what an open community board is. A
+// who installs the app (anyone can read it, and anyone can make an account and upload climbs to it), which is what an open
+// community board is. A
 // private board for friends is still possible: Sync with friends -> Start a board gives a new code. Set `board` to null to
 // have no automatic board, or change `wall` and `board` to make another wall the default in your own copy.
 
