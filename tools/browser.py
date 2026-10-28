@@ -113,8 +113,17 @@ class Browser:
 
     _FILL = "const set = (label, value) => { const input = [...document.querySelectorAll('.dialog input')].find((i) => i.getAttribute('aria-label') === label); input.value = value; };"
 
+    def open_account_dialog(self):
+        """A fresh app asks for nothing, so this opens the account dialog the way the Upload button does, and leaves it open."""
+        self.wait_for("!!document.querySelector('.bar')", what="the app")
+        self.eval(
+            "(async () => { const { app } = await import('./src/app.js'); const { askForAccount } = await import('./src/ui/account.js'); "
+            "askForAccount({ sync: app.sync, canSkip: true }); return true; })()"
+        )
+
     def create_account(self, name: str, password: str = "test-password-1"):
-        """Answers the account dialog of a fresh app (the one shown when a Firebase project is set up) by making an account."""
+        """Opens the account dialog of a fresh app and answers it by making an account."""
+        self.open_account_dialog()
         self.wait_for("!![...document.querySelectorAll('.dialog input')].find((i) => i.getAttribute('aria-label') === 'Username')", what="the account question")
         self.eval(
             "(() => { " + self._FILL + " set('Username', %r); set('Password', %r); set('Password again', %r); "
@@ -123,7 +132,8 @@ class Browser:
         self.wait_for("!document.querySelector('.dialog') && !!document.querySelector('.bar')", what="the app after creating the account")
 
     def sign_in(self, name: str, password: str = "test-password-1"):
-        """Answers the account dialog of a fresh app by signing in to an account that already exists."""
+        """Opens the account dialog of a fresh app and answers it by signing in to an account that already exists."""
+        self.open_account_dialog()
         self.wait_for("!![...document.querySelectorAll('.dialog input')].find((i) => i.getAttribute('aria-label') === 'Username')", what="the account question")
         self.eval(
             "(() => { [...document.querySelectorAll('.dialog button')].find((b) => b.textContent === 'I already have an account').click(); "
